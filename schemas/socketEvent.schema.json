@@ -1,0 +1,10 @@
+{
+  "$id": "SocketEvent",
+  "type": "object",
+  "properties": {
+    "type": { "enum": ["full_state"] },
+    "state": { "$ref": "currentState.schema.json" }
+  },
+  "required": ["type", "state"]
+}
+

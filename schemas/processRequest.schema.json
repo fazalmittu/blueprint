@@ -1,0 +1,10 @@
+{
+  "$id": "ProcessRequest",
+  "type": "object",
+  "properties": {
+    "meetingId": { "type": "string" },
+    "chunk": { "type": "string" }
+  },
+  "required": ["meetingId", "chunk"]
+}
+

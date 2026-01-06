@@ -1,0 +1,11 @@
+{
+  "$id": "Meeting",
+  "type": "object",
+  "properties": {
+    "meetingId": { "type": "string" },
+    "status": { "enum": ["active", "finalized"] },
+    "orgId": { "type": "string" }
+  },
+  "required": ["meetingId", "status", "orgId"]
+}
+
