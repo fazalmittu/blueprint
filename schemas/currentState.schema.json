@@ -2,12 +2,8 @@
   "$id": "CurrentState",
   "type": "object",
   "properties": {
-    "meetingSummary": { "type": "string" },
-    "workflows": {
-      "type": "array",
-      "items": { "$ref": "workflow.schema.json" }
-    }
+    "meetingId": { "type": "string" }
   },
-  "required": ["meetingSummary", "workflows"]
+  "required": ["meetingId"]
 }
 

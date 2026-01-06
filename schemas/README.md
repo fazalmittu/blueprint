@@ -4,6 +4,21 @@ This folder contains JSON Schema definitions that serve as the **single source o
 
 ---
 
+## Quick Start
+
+```bash
+# Install dependencies (one-time)
+pip install datamodel-code-generator
+npm i -D json-schema-to-typescript
+
+# Generate all types
+./scripts/generate_types.sh
+```
+
+That's it. Run the script whenever you modify a schema.
+
+---
+
 ## Schema Overview
 
 | Schema | Description |
@@ -18,62 +33,35 @@ This folder contains JSON Schema definitions that serve as the **single source o
 
 ---
 
-## Generate Backend Pydantic Models
+## Generated Output
 
-### 1. Install the code generator
+After running the script:
 
-```bash
-pip install datamodel-code-generator
+```
+backend/models/
+├── current_state.py
+├── current_state_version.py
+├── meeting.py
+├── process_request.py
+├── process_response.py
+├── socket_event.py
+└── workflow.py
+
+frontend/src/types/
+├── currentState.ts
+├── currentStateVersion.ts
+├── meeting.ts
+├── processRequest.ts
+├── processResponse.ts
+├── socketEvent.ts
+└── workflow.ts
 ```
 
-### 2. Create models folder
+---
 
-```bash
-mkdir -p backend/models
-```
+## Usage
 
-### 3. Generate models
-
-```bash
-# Core models
-datamodel-codegen \
-  --input schemas/workflow.schema.json \
-  --input-file-type jsonschema \
-  --output backend/models/workflow.py
-
-datamodel-codegen \
-  --input schemas/currentState.schema.json \
-  --input-file-type jsonschema \
-  --output backend/models/current_state.py
-
-datamodel-codegen \
-  --input schemas/currentStateVersion.schema.json \
-  --input-file-type jsonschema \
-  --output backend/models/current_state_version.py
-
-datamodel-codegen \
-  --input schemas/meeting.schema.json \
-  --input-file-type jsonschema \
-  --output backend/models/meeting.py
-
-# API models
-datamodel-codegen \
-  --input schemas/processRequest.schema.json \
-  --input-file-type jsonschema \
-  --output backend/models/process_request.py
-
-datamodel-codegen \
-  --input schemas/processResponse.schema.json \
-  --input-file-type jsonschema \
-  --output backend/models/process_response.py
-
-datamodel-codegen \
-  --input schemas/socketEvent.schema.json \
-  --input-file-type jsonschema \
-  --output backend/models/socket_event.py
-```
-
-### 4. Usage in Python
+### Python (Backend)
 
 ```python
 from models.current_state import CurrentState
@@ -96,35 +84,7 @@ state = CurrentState(
 )
 ```
 
----
-
-## Generate Frontend TypeScript Types
-
-### 1. Install the code generator
-
-```bash
-npm i -D json-schema-to-typescript
-```
-
-### 2. Create types folder
-
-```bash
-mkdir -p frontend/src/types
-```
-
-### 3. Generate types
-
-```bash
-npx json2ts -i schemas/workflow.schema.json -o frontend/src/types/workflow.ts
-npx json2ts -i schemas/currentState.schema.json -o frontend/src/types/currentState.ts
-npx json2ts -i schemas/currentStateVersion.schema.json -o frontend/src/types/currentStateVersion.ts
-npx json2ts -i schemas/meeting.schema.json -o frontend/src/types/meeting.ts
-npx json2ts -i schemas/processRequest.schema.json -o frontend/src/types/processRequest.ts
-npx json2ts -i schemas/processResponse.schema.json -o frontend/src/types/processResponse.ts
-npx json2ts -i schemas/socketEvent.schema.json -o frontend/src/types/socketEvent.ts
-```
-
-### 4. Usage in TypeScript
+### TypeScript (Frontend)
 
 ```typescript
 import { CurrentState } from "../types/currentState";
@@ -147,37 +107,10 @@ const state: CurrentState = {
 
 ---
 
-## Automation Scripts
-
-Add these to your `package.json` / `Makefile` for convenience:
-
-### package.json (frontend)
-
-```json
-{
-  "scripts": {
-    "generate:types": "json2ts -i ../schemas/*.schema.json -o src/types/"
-  }
-}
-```
-
-### Makefile (backend)
-
-```makefile
-generate-models:
-	@for schema in schemas/*.schema.json; do \
-		name=$$(basename $$schema .schema.json | sed 's/\([A-Z]\)/_\L\1/g' | sed 's/^_//'); \
-		datamodel-codegen --input $$schema --input-file-type jsonschema --output backend/models/$$name.py; \
-	done
-```
-
----
-
 ## Workflow
 
 1. **Edit schema** in `schemas/` folder
-2. **Regenerate** both Python and TypeScript types
+2. **Run** `./scripts/generate_types.sh`
 3. **Compiler breaks** on both sides if you forgot to update something
 
 This ensures frontend and backend stay in sync at compile time rather than discovering mismatches at runtime.
-
