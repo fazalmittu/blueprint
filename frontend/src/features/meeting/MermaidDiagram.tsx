@@ -6,34 +6,58 @@ interface MermaidDiagramProps {
   diagram: string;
 }
 
-// Initialize mermaid with dark theme
+// Initialize mermaid with light theme
 mermaid.initialize({
   startOnLoad: false,
-  theme: "dark",
+  theme: "base",
   themeVariables: {
-    primaryColor: "#3b82f6",
-    primaryTextColor: "#fafafa",
-    primaryBorderColor: "#3f3f46",
-    lineColor: "#71717a",
-    secondaryColor: "#27272a",
-    tertiaryColor: "#18181b",
-    background: "#09090b",
-    mainBkg: "#18181b",
-    nodeBorder: "#3f3f46",
-    clusterBkg: "#27272a",
-    clusterBorder: "#3f3f46",
-    titleColor: "#fafafa",
-    edgeLabelBackground: "#18181b",
+    // Background
+    background: "#ffffff",
+    mainBkg: "#f8fafc",
+    
+    // Node colors
+    primaryColor: "#e0f2fe",
+    primaryTextColor: "#0c4a6e",
+    primaryBorderColor: "#38bdf8",
+    
+    secondaryColor: "#fef3c7",
+    secondaryTextColor: "#92400e",
+    secondaryBorderColor: "#fbbf24",
+    
+    tertiaryColor: "#f0fdf4",
+    tertiaryTextColor: "#166534",
+    tertiaryBorderColor: "#4ade80",
+    
+    // Lines and labels
+    lineColor: "#64748b",
+    textColor: "#334155",
+    
+    // Clusters
+    clusterBkg: "#f1f5f9",
+    clusterBorder: "#cbd5e1",
+    
+    // Title
+    titleColor: "#0f172a",
+    
+    // Edge labels
+    edgeLabelBackground: "#ffffff",
+    
+    // Fonts
+    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
+    fontSize: "14px",
   },
   flowchart: {
     htmlLabels: true,
     curve: "basis",
+    padding: 20,
+    nodeSpacing: 50,
+    rankSpacing: 60,
   },
 });
 
 /**
  * Renders a Mermaid diagram from a diagram string.
- * Re-renders completely on diagram change (no diffing).
+ * Uses light theme to match the app aesthetic.
  */
 export function MermaidDiagram({ id, diagram }: MermaidDiagramProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -55,7 +79,14 @@ export function MermaidDiagram({ id, diagram }: MermaidDiagramProps) {
       } catch (error) {
         console.error("[MermaidDiagram] Render failed:", error);
         containerRef.current.innerHTML = `
-          <div style="color: var(--error); padding: 1rem; font-family: var(--font-mono); font-size: 0.875rem;">
+          <div style="
+            color: var(--error); 
+            padding: var(--space-md); 
+            font-family: var(--font-mono); 
+            font-size: 0.75rem;
+            background: #fef2f2;
+            border-radius: var(--radius-sm);
+          ">
             Failed to render diagram
           </div>
         `;
@@ -73,8 +104,9 @@ export function MermaidDiagram({ id, diagram }: MermaidDiagramProps) {
         width: "100%",
         overflow: "auto",
         padding: "var(--space-md)",
+        display: "flex",
+        justifyContent: "center",
       }}
     />
   );
 }
-

@@ -191,15 +191,16 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-// Advance stage and broadcast every 2 seconds
-setInterval(() => {
+// Advance stage and broadcast every 2 seconds until final stage
+const interval = setInterval(() => {
   if (stageIndex < summaryStages.length - 1) {
     stageIndex++;
+    broadcastState();
   } else {
-    // Loop back to start for continuous demo
-    stageIndex = 0;
-    console.log("\n--- Looping back to start ---\n");
+    // Stop at final stage - let user interact
+    clearInterval(interval);
+    console.log("\n✓ Final state reached. Canvas is now static. Interact freely!\n");
+    console.log("  Press Ctrl+C to stop the server.\n");
   }
-  broadcastState();
 }, 2000);
 
