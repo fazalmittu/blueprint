@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
 from pydantic import ValidationError
+import httpx
 from models import (
     Workflow,
     CurrentState,
@@ -21,6 +22,9 @@ from dotenv import load_dotenv
 import database as db
 
 load_dotenv()
+
+# WebSocket server URL for broadcasting updates
+WEBSOCKET_SERVER_URL = os.getenv('WEBSOCKET_SERVER_URL', 'http://localhost:8000')
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -219,11 +223,51 @@ def register_routes(app):
         )
         db.add_state_version(meeting_id, new_state_version)
 
+        # Broadcast the state update to all connected WebSocket clients
+        broadcast_state_update(meeting_id, new_state_data)
+
         return jsonify({
             'currentState': new_state_version.model_dump(mode='json'),
             'previousVersion': latest_state.version,
             'newVersion': new_state_version.version
         }), 200
+
+
+# ==================== WEBSOCKET BROADCAST ====================
+
+def broadcast_state_update(meeting_id: str, state_data: CurrentStateData) -> bool:
+    """
+    Notify the WebSocket server to broadcast a state update to all connected clients.
+    
+    Args:
+        meeting_id: The meeting ID to broadcast to
+        state_data: The current state data to broadcast
+    
+    Returns:
+        True if broadcast was successful, False otherwise
+    """
+    try:
+        response = httpx.post(
+            f"{WEBSOCKET_SERVER_URL}/broadcast/{meeting_id}",
+            json={
+                "type": "full_state",
+                "state": state_data.model_dump(mode='json')
+            },
+            timeout=5.0
+        )
+        if response.status_code == 200:
+            result = response.json()
+            print(f"📡 Broadcast to {result.get('clients_notified', 0)} clients")
+            return True
+        else:
+            print(f"⚠️ Broadcast failed: {response.status_code}")
+            return False
+    except httpx.ConnectError:
+        print("⚠️ WebSocket server not available - skipping broadcast")
+        return False
+    except Exception as e:
+        print(f"⚠️ Broadcast error: {e}")
+        return False
 
 
 # ==================== HELPER FUNCTIONS ====================
