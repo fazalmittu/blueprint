@@ -3,6 +3,7 @@ import re
 import json
 import uuid
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from openai import OpenAI
 from pydantic import ValidationError
 from models import (
@@ -28,6 +29,10 @@ client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 def create_app():
     """Application factory."""
     app = Flask(__name__)
+    
+    # Enable CORS for frontend
+    app_url = os.getenv('APP_URL', 'http://localhost:5173')
+    CORS(app, origins=[app_url])
 
     # Register routes
     register_routes(app)
@@ -428,4 +433,6 @@ def process_full_transcript(transcript: str, verbose: bool = True) -> CurrentSta
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    host = os.getenv('HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', '5001'))
+    app.run(host=host, port=port, debug=True)

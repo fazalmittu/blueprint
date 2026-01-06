@@ -1,6 +1,6 @@
-import { useParams } from "react-router-dom";
-import { useState, useCallback } from "react";
-import { useMeetingSocket } from "./useMeetingSocket";
+import { useParams, useNavigate } from "react-router-dom";
+import { useState, useCallback, useEffect } from "react";
+import { getMeeting, type MeetingResponse } from "@/api/client";
 import { InfiniteCanvas } from "./InfiniteCanvas";
 import { Toolbar } from "./Toolbar";
 import { 
@@ -12,7 +12,6 @@ import {
   type ShapeType,
   type ShapeColor,
 } from "./blocks";
-import type { ConnectionStatus } from "@/types";
 
 // Block state types
 interface TextBlockState {
@@ -56,53 +55,6 @@ function getWorkflowPosition(index: number): Position {
 }
 
 /**
- * Status indicator component.
- */
-function StatusIndicator({ status }: { status: ConnectionStatus }) {
-  const statusConfig = {
-    connecting: { color: "var(--warning)", label: "Connecting..." },
-    connected: { color: "var(--success)", label: "Live" },
-    disconnected: { color: "var(--text-muted)", label: "Disconnected" },
-    error: { color: "var(--error)", label: "Error" },
-  };
-
-  const config = statusConfig[status];
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: "var(--space-lg)",
-        right: "var(--space-lg)",
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-sm)",
-        padding: "var(--space-sm) var(--space-md)",
-        background: "var(--bg-elevated)",
-        border: "1px solid var(--border-subtle)",
-        borderRadius: "var(--radius-md)",
-        boxShadow: "var(--shadow-md)",
-        fontSize: "0.75rem",
-        fontFamily: "var(--font-mono)",
-        color: "var(--text-secondary)",
-        zIndex: 100,
-      }}
-    >
-      <span
-        style={{
-          width: "8px",
-          height: "8px",
-          borderRadius: "50%",
-          background: config.color,
-          boxShadow: status === "connected" ? `0 0 8px ${config.color}` : "none",
-        }}
-      />
-      {config.label}
-    </div>
-  );
-}
-
-/**
  * Loading state.
  */
 function LoadingState() {
@@ -135,7 +87,7 @@ function LoadingState() {
           fontFamily: "var(--font-mono)",
         }}
       >
-        Connecting to meeting...
+        Loading meeting...
       </p>
       <style>{`
         @keyframes spin {
@@ -147,21 +99,34 @@ function LoadingState() {
 }
 
 /**
- * Missing meeting ID error.
+ * Error state.
  */
-function MissingMeetingId() {
+function ErrorState({ message, onBack }: { message: string; onBack: () => void }) {
   return (
     <div
       style={{
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         height: "100%",
-        color: "var(--error)",
-        fontFamily: "var(--font-mono)",
+        gap: "var(--space-md)",
       }}
     >
-      Missing meeting ID
+      <p style={{ color: "var(--error)", margin: 0 }}>{message}</p>
+      <button
+        onClick={onBack}
+        style={{
+          padding: "var(--space-sm) var(--space-md)",
+          background: "var(--bg-secondary)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-md)",
+          cursor: "pointer",
+          fontSize: "0.875rem",
+        }}
+      >
+        Back to Home
+      </button>
     </div>
   );
 }
@@ -169,28 +134,23 @@ function MissingMeetingId() {
 /**
  * Main meeting canvas content.
  */
-function MeetingContent({ meetingId }: { meetingId: string }) {
-  const { state, status } = useMeetingSocket(meetingId);
+function MeetingContent({ data }: { data: MeetingResponse }) {
+  const navigate = useNavigate();
+  const state = data.currentState.data;
+  const meeting = data.meeting;
   
   // Workflow positions (keyed by workflow ID)
   const [workflowPositions, setWorkflowPositions] = useState<Record<string, Position>>({});
   
   // Notes block state
   const [notesPosition, setNotesPosition] = useState<Position>({ x: 40, y: 80 });
-  const [notesContent, setNotesContent] = useState<string>("");
-  const [notesInitialized, setNotesInitialized] = useState(false);
+  const [notesContent, setNotesContent] = useState<string>(state.meetingSummary);
   
   // User-created blocks
   const [userBlocks, setUserBlocks] = useState<UserBlock[]>([]);
   
   // Selection state
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-
-  // Initialize notes content from server
-  if (state && !notesInitialized) {
-    setNotesContent(state.meetingSummary);
-    setNotesInitialized(true);
-  }
 
   const getWorkflowPos = useCallback((workflowId: string, index: number): Position => {
     return workflowPositions[workflowId] || getWorkflowPosition(index);
@@ -214,7 +174,6 @@ function MeetingContent({ meetingId }: { meetingId: string }) {
 
   const handleAddShape = useCallback((shape: ShapeType) => {
     const colors: ShapeColor[] = ["blue", "green", "amber", "rose", "purple"];
-    // Circles and diamonds default to square, rectangles are wider
     const isSquare = shape === "circle" || shape === "diamond";
     const newBlock: ShapeBlockState = {
       type: "shape",
@@ -279,10 +238,6 @@ function MeetingContent({ meetingId }: { meetingId: string }) {
   const handleCanvasClick = useCallback(() => {
     setSelectedBlockId(null);
   }, []);
-
-  if (!state) {
-    return <LoadingState />;
-  }
 
   return (
     <div style={{ height: "100%", width: "100%" }} onClick={handleCanvasClick}>
@@ -351,7 +306,66 @@ function MeetingContent({ meetingId }: { meetingId: string }) {
       </InfiniteCanvas>
 
       <Toolbar onAddText={handleAddText} onAddShape={handleAddShape} />
-      <StatusIndicator status={status} />
+      
+      {/* Header bar */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 48,
+          background: "var(--bg-elevated)",
+          borderBottom: "1px solid var(--border-subtle)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 var(--space-md)",
+          zIndex: 100,
+        }}
+      >
+        <button
+          onClick={() => navigate("/")}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-sm)",
+            color: "var(--text-secondary)",
+            fontSize: "0.875rem",
+          }}
+        >
+          ← Back
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+            }}
+          >
+            {meeting.meetingId.slice(0, 8)}...
+          </span>
+          <span
+            className={`status-badge ${meeting.status}`}
+            style={{
+              fontSize: "0.6875rem",
+              fontWeight: 500,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              padding: "2px 8px",
+              borderRadius: 9999,
+              background: meeting.status === "finalized" ? "#e0e7ff" : "#dcfce7",
+              color: meeting.status === "finalized" ? "#3730a3" : "#166534",
+            }}
+          >
+            {meeting.status}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -361,10 +375,38 @@ function MeetingContent({ meetingId }: { meetingId: string }) {
  */
 export function Meeting() {
   const { meetingId } = useParams<{ meetingId: string }>();
+  const navigate = useNavigate();
+  const [data, setData] = useState<MeetingResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!meetingId) return;
+    
+    async function load() {
+      try {
+        const res = await getMeeting(meetingId!);
+        setData(res);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load meeting");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [meetingId]);
 
   if (!meetingId) {
-    return <MissingMeetingId />;
+    return <ErrorState message="Missing meeting ID" onBack={() => navigate("/")} />;
   }
 
-  return <MeetingContent meetingId={meetingId} />;
+  if (loading) {
+    return <LoadingState />;
+  }
+
+  if (error || !data) {
+    return <ErrorState message={error || "Failed to load"} onBack={() => navigate("/")} />;
+  }
+
+  return <MeetingContent data={data} />;
 }
