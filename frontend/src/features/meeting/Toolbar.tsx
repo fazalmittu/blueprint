@@ -12,7 +12,7 @@ export function Toolbar({ onAddText, onAddShape }: ToolbarProps) {
       onClick={(e) => e.stopPropagation()}
       style={{
         position: "fixed",
-        top: "var(--space-lg)",
+        top: "64px", // Below the 48px header
         left: "50%",
         transform: "translateX(-50%)",
         display: "flex",
