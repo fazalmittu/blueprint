@@ -3,6 +3,7 @@ import re
 import json
 import uuid
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from openai import OpenAI
 from pydantic import ValidationError
 import httpx
@@ -32,6 +33,10 @@ client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 def create_app():
     """Application factory."""
     app = Flask(__name__)
+    
+    # Enable CORS for frontend
+    app_url = os.getenv('APP_URL', 'http://localhost:5173')
+    CORS(app, origins=[app_url])
 
     # Register routes
     register_routes(app)
@@ -42,7 +47,57 @@ def create_app():
 def register_routes(app):
     """Register all API routes."""
 
+    # ==================== ORG ENDPOINTS ====================
+
+    @app.route('/org', methods=['GET'])
+    def get_current_org():
+        """
+        Get the current user's organization.
+        For now, returns the first org found in the database.
+        
+        Returns:
+            orgId (str): The organization ID
+        """
+        orgs = db.get_all_orgs()
+        if not orgs:
+            return jsonify({'error': 'No organizations found'}), 404
+        
+        # For now, just return the first org
+        return jsonify({'orgId': orgs[0]}), 200
+
+    @app.route('/orgs', methods=['GET'])
+    def get_all_orgs():
+        """
+        Get all organizations.
+        
+        Returns:
+            orgs (list): List of organization IDs
+        """
+        orgs = db.get_all_orgs()
+        return jsonify({'orgs': orgs}), 200
+
     # ==================== MEETING ENDPOINTS ====================
+
+    @app.route('/meetings', methods=['GET'])
+    def get_meetings_by_org():
+        """
+        Get all meetings for an organization.
+        
+        Query Parameters:
+            orgId (str): The organization ID
+        
+        Returns:
+            meetings (list): List of meetings for the org
+        """
+        org_id = request.args.get('orgId')
+        
+        if not org_id:
+            return jsonify({'error': 'orgId is required'}), 400
+        
+        meetings = db.get_meetings_by_org(org_id)
+        return jsonify({
+            'meetings': [m.model_dump(mode='json') for m in meetings]
+        }), 200
 
     @app.route('/meeting', methods=['POST'])
     def create_meeting():
@@ -422,4 +477,6 @@ def process_full_transcript(transcript: str, verbose: bool = True) -> CurrentSta
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    host = os.getenv('HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', '5001'))
+    app.run(host=host, port=port, debug=True)
