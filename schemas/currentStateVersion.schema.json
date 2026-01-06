@@ -4,7 +4,17 @@
   "properties": {
     "version": { "type": "integer" },
     "currentStateId": { "type": "string" },
-    "data": { "$ref": "currentState.schema.json" }
+    "data": {
+      "type": "object",
+      "properties": {
+        "meetingSummary": { "type": "string" },
+        "workflows": {
+          "type": "array",
+          "items": { "$ref": "workflow.schema.json" }
+        }
+      },
+      "required": ["meetingSummary", "workflows"]
+    }
   },
   "required": ["version", "currentStateId", "data"]
 }

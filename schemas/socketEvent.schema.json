@@ -3,7 +3,17 @@
   "type": "object",
   "properties": {
     "type": { "enum": ["full_state"] },
-    "state": { "$ref": "currentState.schema.json" }
+    "state": {
+      "type": "object",
+      "properties": {
+        "meetingSummary": { "type": "string" },
+        "workflows": {
+          "type": "array",
+          "items": { "$ref": "workflow.schema.json" }
+        }
+      },
+      "required": ["meetingSummary", "workflows"]
+    }
   },
   "required": ["type", "state"]
 }
