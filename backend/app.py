@@ -1,30 +1,36 @@
 import os
 import re
 import json
+import uuid
 from flask import Flask, request, jsonify
 from openai import OpenAI
-from config import config, Config
-from models import db, Meeting, CurrentState
+from pydantic import ValidationError
+from models import (
+    Workflow,
+    CurrentState,
+    CurrentStateVersion,
+    Meeting,
+    ProcessRequest,
+    ProcessResponse,
+    SocketEvent,
+)
+from models.meeting_schema import Status
+from models.currentStateVersion_schema import Data as CurrentStateData
+from dotenv import load_dotenv
 
+load_dotenv()
 
 # Initialize OpenAI client
-client = OpenAI(api_key=Config.OPENAI_API_KEY)
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+# In-memory storage
+meetings_store: dict[str, Meeting] = {}
+states_store: dict[str, list[CurrentStateVersion]] = {}  # meetingId -> list of state versions
 
 
-def create_app(config_name=None):
+def create_app():
     """Application factory."""
-    if config_name is None:
-        config_name = os.getenv('FLASK_ENV', 'development')
-
     app = Flask(__name__)
-    app.config.from_object(config[config_name])
-
-    # Initialize extensions
-    db.init_app(app)
-
-    # Create tables
-    with app.app_context():
-        db.create_all()
 
     # Register routes
     register_routes(app)
@@ -46,23 +52,30 @@ def register_routes(app):
             meetingId (uuid): The unique identifier for the meeting
             currentStateId (uuid): The unique identifier for the initial state
         """
-        # Create new meeting
-        meeting = Meeting()
-        db.session.add(meeting)
-        db.session.flush()  # Get the meeting ID before creating state
+        meeting_id = str(uuid.uuid4())
+        current_state_id = str(uuid.uuid4())
+        org_id = request.get_json().get('orgId', 'default') if request.get_json() else 'default'
 
-        # Create initial current state
-        current_state = CurrentState(
-            meeting_id=meeting.id,
-            version=1,
-            state_data={}
+        # Create meeting using Pydantic model
+        meeting = Meeting(
+            meetingId=meeting_id,
+            status=Status.active,
+            orgId=org_id
         )
-        db.session.add(current_state)
-        db.session.commit()
+        meetings_store[meeting_id] = meeting
+
+        # Create initial current state version using Pydantic model
+        initial_state_data = get_initial_state()
+        state_version = CurrentStateVersion(
+            version=0,
+            currentStateId=current_state_id,
+            data=initial_state_data
+        )
+        states_store[meeting_id] = [state_version]
 
         return jsonify({
-            'meetingId': meeting.id,
-            'currentStateId': current_state.id
+            'meetingId': meeting_id,
+            'currentStateId': current_state_id
         }), 201
 
     @app.route('/meeting', methods=['GET'])
@@ -82,21 +95,20 @@ def register_routes(app):
             return jsonify({'error': 'meetingId is required'}), 400
 
         # Find the meeting
-        meeting = Meeting.query.get(meeting_id)
+        meeting = meetings_store.get(meeting_id)
         if not meeting:
             return jsonify({'error': 'Meeting not found'}), 404
 
-        # Get latest current state (ordered by version desc)
-        latest_state = CurrentState.query.filter_by(
-            meeting_id=meeting_id
-        ).order_by(CurrentState.version.desc()).first()
-
-        if not latest_state:
+        # Get latest current state
+        state_versions = states_store.get(meeting_id, [])
+        if not state_versions:
             return jsonify({'error': 'No state found for meeting'}), 404
 
+        latest_state = state_versions[-1]
+
         return jsonify({
-            'meeting': meeting.to_dict(),
-            'currentState': latest_state.to_dict()
+            'meeting': meeting.model_dump(),
+            'currentState': latest_state.model_dump()
         }), 200
 
     # ==================== PROCESS ENDPOINT ====================
@@ -106,7 +118,7 @@ def register_routes(app):
         """
         Process a chunk of data for a meeting.
         
-        Gets the latest current state from DB, performs LLM processing,
+        Gets the latest current state from store, performs LLM processing,
         and stores a new version of the state.
         
         Request Body:
@@ -121,117 +133,63 @@ def register_routes(app):
         if not data:
             return jsonify({'error': 'Request body is required'}), 400
 
-        chunk = data.get('chunk')
-        meeting_id = data.get('meetingId')
+        # Validate request using Pydantic model
+        try:
+            process_request = ProcessRequest(**data)
+        except ValidationError as e:
+            return jsonify({'error': str(e)}), 400
 
-        if not chunk:
-            return jsonify({'error': 'chunk is required'}), 400
-        if not meeting_id:
-            return jsonify({'error': 'meetingId is required'}), 400
+        chunk = process_request.chunk
+        meeting_id = process_request.meetingId
 
         # Find the meeting
-        meeting = Meeting.query.get(meeting_id)
+        meeting = meetings_store.get(meeting_id)
         if not meeting:
             return jsonify({'error': 'Meeting not found'}), 404
 
-        if meeting.status == 'finalized':
+        if meeting.status == Status.finalized:
             return jsonify({'error': 'Meeting has been finalized'}), 400
 
         # Get latest current state
-        latest_state = CurrentState.query.filter_by(
-            meeting_id=meeting_id
-        ).order_by(CurrentState.version.desc()).first()
-
-        if not latest_state:
+        state_versions = states_store.get(meeting_id, [])
+        if not state_versions:
             return jsonify({'error': 'No state found for meeting'}), 404
 
-        # ==================== LLM MAGIC PLACEHOLDER ====================
-        # TODO: Replace this with actual LLM processing
-        new_state_data = process_with_llm(latest_state.state_data, chunk)
-        # ===============================================================
+        latest_state = state_versions[-1]
+        current_state_data = latest_state.data
 
-        # Create new state version
-        new_state = CurrentState(
-            meeting_id=meeting_id,
+        # Process with LLM
+        new_state_data = process_with_llm(current_state_data, chunk, latest_state.version)
+
+        # Create new state version using Pydantic model
+        new_current_state_id = str(uuid.uuid4())
+        new_state_version = CurrentStateVersion(
             version=latest_state.version + 1,
-            state_data=new_state_data
+            currentStateId=new_current_state_id,
+            data=new_state_data
         )
-        db.session.add(new_state)
-        db.session.commit()
+        states_store[meeting_id].append(new_state_version)
 
         return jsonify({
-            'currentState': new_state.to_dict(),
+            'currentState': new_state_version.model_dump(),
             'previousVersion': latest_state.version,
-            'newVersion': new_state.version
-        }), 200
-
-    # ==================== FINALIZE ENDPOINT ====================
-
-    @app.route('/finalize', methods=['POST'])
-    def finalize_meeting():
-        """
-        Finalize a meeting and clean up workflows.
-        
-        Request Body:
-            meetingId (uuid): The meeting ID to finalize
-        
-        Returns:
-            Confirmation of finalization
-        """
-        data = request.get_json()
-
-        if not data:
-            return jsonify({'error': 'Request body is required'}), 400
-
-        meeting_id = data.get('meetingId')
-
-        if not meeting_id:
-            return jsonify({'error': 'meetingId is required'}), 400
-
-        # Find the meeting
-        meeting = Meeting.query.get(meeting_id)
-        if not meeting:
-            return jsonify({'error': 'Meeting not found'}), 404
-
-        if meeting.status == 'finalized':
-            return jsonify({'error': 'Meeting is already finalized'}), 400
-
-        # ==================== CLEANUP WORKFLOWS ====================
-        # TODO: Add actual cleanup logic here
-        cleanup_workflows(meeting_id)
-        # ===========================================================
-
-        # Update meeting status
-        meeting.status = 'finalized'
-        db.session.commit()
-
-        # Get final state
-        final_state = CurrentState.query.filter_by(
-            meeting_id=meeting_id
-        ).order_by(CurrentState.version.desc()).first()
-
-        return jsonify({
-            'message': 'Meeting finalized successfully',
-            'meetingId': meeting.id,
-            'finalState': final_state.to_dict() if final_state else None,
-            'totalVersions': final_state.version if final_state else 0
+            'newVersion': new_state_version.version
         }), 200
 
 
 # ==================== HELPER FUNCTIONS ====================
 
-def get_initial_state() -> dict:
+def get_initial_state() -> CurrentStateData:
     """
-    Returns the initial currentState structure.
+    Returns the initial currentState data structure.
     
     Returns:
-        dict: Initial state with empty meetingSummary, workflows, and version 1
+        CurrentStateData: Initial state data with empty meetingSummary and workflows
     """
-    return {
-        "meetingSummary": "",
-        "workflows": [],
-        "version": 1
-    }
+    return CurrentStateData(
+        meetingSummary="",
+        workflows=[]
+    )
 
 
 def chunk_transcript(transcript: str) -> list[str]:
@@ -274,64 +232,63 @@ def chunk_transcript(transcript: str) -> list[str]:
     return chunks
 
 
-def pass_chunk(chunk: str, current_state: dict, chunk_index: int = 0) -> dict:
+def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: int = 0) -> CurrentStateData:
     """
-    Passes a chunk and the currentState as context to GPT.
-    The model returns an updated version of the currentState.
+    Passes a chunk and the currentState data as context to GPT.
+    The model returns an updated version of the currentState data.
     
     Args:
         chunk: The text chunk to process
-        current_state: The current state dictionary containing:
-            - meetingSummary (str): Summary of the meeting so far
-            - workflows (list): List of workflow dicts with mermaidDiagram and sources
-            - version (int): Current version number
+        current_state_data: The current state data containing meetingSummary and workflows
         chunk_index: The index of this chunk (for source tracking)
     
     Returns:
-        dict: Updated currentState with incremented version
+        CurrentStateData: Updated currentState data
     """
     system_prompt = """You are an AI assistant that processes meeting transcripts to extract insights.
-Your job is to:
-1. Update the meeting summary with key points from the new chunk
-2. Identify any workflows or processes mentioned and create/update Mermaid diagrams for them
+    Your job is to:
+    1. Update the meeting summary with key points from the new chunk
+    2. Identify any workflows or processes mentioned and create/update Mermaid diagrams for them
 
-You will receive the current state and a new chunk of transcript.
-Return an updated state in the exact JSON format specified.
+    You will receive the current state and a new chunk of transcript.
+    Return an updated state in the exact JSON format specified.
 
-For workflows:
-- Create a new workflow if a distinct process/workflow is described
-- Update existing workflows if the chunk adds to them
-- Use valid Mermaid diagram syntax (flowchart TD format)
-- Track which chunks contributed to each workflow in the sources array
+    For workflows:
+    - Create a new workflow if a distinct process/workflow is described
+    - Update existing workflows if the chunk adds to them
+    - Each workflow must have a unique id (UUID format), descriptive title, valid Mermaid diagram, and sources array
+    - Use valid Mermaid diagram syntax (flowchart TD format)
+    - Track which chunks contributed to each workflow in the sources array
 
-Important:
-- Keep the meeting summary concise but comprehensive
-- Only create workflows for actual processes/procedures described
-- Each workflow should have a descriptive mermaid diagram"""
+    Important:
+    - Keep the meeting summary concise but comprehensive
+    - Only create workflows for actual processes/procedures described
+    - Each workflow should have a descriptive title and mermaid diagram"""
 
     user_prompt = f"""Current State:
-{json.dumps(current_state, indent=2)}
+    {json.dumps(current_state_data.model_dump(), indent=2)}
 
-New Chunk (index {chunk_index}):
-"{chunk}"
+    New Chunk (index {chunk_index}):
+    "{chunk}"
 
-Please analyze this chunk and return an updated state. The response must be valid JSON with this exact structure:
-{{
-    "meetingSummary": "updated summary incorporating new information",
-    "workflows": [
-        {{
-            "mermaidDiagram": "flowchart TD\\n    A[Start] --> B[Step]\\n    B --> C[End]",
-            "sources": ["chunk_0", "chunk_1"]
-        }}
-    ],
-    "version": {current_state.get('version', 0) + 1}
-}}
+    Please analyze this chunk and return an updated state. The response must be valid JSON with this exact structure:
+    {{
+        "meetingSummary": "updated summary incorporating new information",
+        "workflows": [
+            {{
+                "id": "uuid-string",
+                "title": "Descriptive workflow title",
+                "mermaidDiagram": "flowchart TD\\n    A[Start] --> B[Step]\\n    B --> C[End]",
+                "sources": ["chunk_0", "chunk_1"]
+            }}
+        ]
+    }}
 
-Return ONLY the JSON object, no additional text."""
+    Return ONLY the JSON object, no additional text."""
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5.2",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -342,36 +299,46 @@ Return ONLY the JSON object, no additional text."""
         
         result = json.loads(response.choices[0].message.content)
         
-        # Ensure the version is incremented
-        result['version'] = current_state.get('version', 0) + 1
+        # Parse workflows into Workflow models, ensuring required fields
+        workflows = []
+        for wf_data in result.get('workflows', []):
+            workflow = Workflow(
+                id=wf_data.get('id', str(uuid.uuid4())),
+                title=wf_data.get('title', 'Untitled Workflow'),
+                mermaidDiagram=wf_data.get('mermaidDiagram', ''),
+                sources=wf_data.get('sources', [])
+            )
+            workflows.append(workflow)
         
-        return result
+        return CurrentStateData(
+            meetingSummary=result.get('meetingSummary', ''),
+            workflows=workflows
+        )
         
     except Exception as e:
-        # On error, return current state with incremented version
+        # On error, return current state unchanged
         print(f"Error in pass_chunk: {e}")
-        new_state = current_state.copy()
-        new_state['version'] = current_state.get('version', 0) + 1
-        return new_state
+        return current_state_data.model_copy()
 
 
-def process_with_llm(current_state_data: dict, chunk: str) -> dict:
+def process_with_llm(current_state_data: CurrentStateData, chunk: str, version: int = 0) -> CurrentStateData:
     """
     Process a chunk using LLM and update the state.
     
     Args:
-        current_state_data: The current state data dictionary
+        current_state_data: The current state data
         chunk: The new text chunk to process
+        version: The current version number (for chunk index calculation)
     
     Returns:
-        Updated state data dictionary
+        Updated CurrentStateData after processing
     """
     # Initialize state if empty
-    if not current_state_data or 'meetingSummary' not in current_state_data:
+    if current_state_data is None:
         current_state_data = get_initial_state()
     
     # Calculate chunk index based on version
-    chunk_index = current_state_data.get('version', 1) - 1
+    chunk_index = version
     
     # Process the chunk with GPT
     updated_state = pass_chunk(chunk, current_state_data, chunk_index)
@@ -379,46 +346,42 @@ def process_with_llm(current_state_data: dict, chunk: str) -> dict:
     return updated_state
 
 
-def process_full_transcript(transcript: str) -> dict:
+def process_full_transcript(transcript: str, verbose: bool = True) -> CurrentStateData:
     """
     Process a full transcript by chunking it and processing each chunk.
     
     Args:
         transcript: The full transcript string
+        verbose: Whether to print progress updates
     
     Returns:
-        Final state after processing all chunks
+        Final CurrentStateData after processing all chunks
     """
     chunks = chunk_transcript(transcript)
-    current_state = get_initial_state()
+    current_state_data = get_initial_state()
+    
+    if verbose:
+        print(f"\n📝 Transcript chunked into {len(chunks)} chunks\n")
+        print("=" * 60)
     
     for i, chunk in enumerate(chunks):
-        current_state = pass_chunk(chunk, current_state, i)
+        if verbose:
+            print(f"\n🔄 Processing chunk {i + 1}/{len(chunks)}...")
+            print(f"   Chunk: \"{chunk[:80]}{'...' if len(chunk) > 80 else ''}\"")
+        
+        current_state_data = pass_chunk(chunk, current_state_data, i)
+        
+        if verbose:
+            print(f"   ✅ Processed chunk {i + 1}")
+            print(f"   📄 Summary length: {len(current_state_data.meetingSummary)} chars")
+            print(f"   🔀 Workflows: {len(current_state_data.workflows)}")
     
-    return current_state
+    return current_state_data
 
-
-def cleanup_workflows(meeting_id: str) -> None:
-    """
-    Placeholder function for workflow cleanup.
-    
-    TODO: Implement actual cleanup logic here.
-    
-    Args:
-        meeting_id: The meeting ID to clean up workflows for
-    """
-    # Placeholder implementation
-    # In production, this would:
-    # - Clean up any background tasks
-    # - Release any held resources
-    # - Archive meeting data if needed
-    # - Send notifications
-    pass
 
 
 # ==================== MAIN ====================
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=5000, debug=True)
-
+    app.run(host='0.0.0.0', port=5001, debug=True)
