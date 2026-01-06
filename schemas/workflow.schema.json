@@ -12,4 +12,3 @@
   },
   "required": ["id", "title", "mermaidDiagram", "sources"]
 }
-

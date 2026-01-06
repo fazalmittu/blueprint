@@ -8,4 +8,3 @@
   },
   "required": ["version", "currentStateId", "data"]
 }
-
