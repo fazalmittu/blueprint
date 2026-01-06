@@ -13,8 +13,8 @@ from models.currentStateVersion_schema import Data as CurrentStateData
 from models.workflow_schema import Model as Workflow
 
 
-# Database file path
-DB_PATH = os.path.join(os.path.dirname(__file__), 'blueprint.db')
+# Database file path (in project root, outside backend folder)
+DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'blueprint.db')
 
 
 def get_connection() -> sqlite3.Connection:
