@@ -1,0 +1,11 @@
+{
+  "$id": "CurrentStateVersion",
+  "type": "object",
+  "properties": {
+    "version": { "type": "integer" },
+    "currentStateId": { "type": "string" },
+    "data": { "$ref": "currentState.schema.json" }
+  },
+  "required": ["version", "currentStateId", "data"]
+}
+

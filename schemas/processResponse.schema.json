@@ -1,0 +1,9 @@
+{
+  "$id": "ProcessResponse",
+  "type": "object",
+  "properties": {
+    "currentState": { "$ref": "currentState.schema.json" }
+  },
+  "required": ["currentState"]
+}
+

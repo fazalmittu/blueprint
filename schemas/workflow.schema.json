@@ -1,0 +1,15 @@
+{
+  "$id": "Workflow",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "mermaidDiagram": { "type": "string" },
+    "sources": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["id", "title", "mermaidDiagram", "sources"]
+}
+
