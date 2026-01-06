@@ -115,6 +115,37 @@ def update_meeting_status(meeting_id: str, status: Status) -> bool:
         return cursor.rowcount > 0
 
 
+def get_all_orgs() -> list[str]:
+    """Get all unique org IDs from meetings."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT DISTINCT org_id FROM meetings ORDER BY org_id')
+        rows = cursor.fetchall()
+        return [row['org_id'] for row in rows]
+
+
+def get_meetings_by_org(org_id: str) -> list[Meeting]:
+    """Get all meetings for an organization."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT meeting_id, status, org_id FROM meetings WHERE org_id = ? ORDER BY meeting_id',
+            (org_id,)
+        )
+        rows = cursor.fetchall()
+        
+        meetings = []
+        for row in rows:
+            meeting = Meeting(
+                meetingId=row['meeting_id'],
+                status=Status(row['status']),
+                orgId=row['org_id']
+            )
+            meetings.append(meeting)
+        
+        return meetings
+
+
 # ==================== STATE VERSION OPERATIONS ====================
 
 def _serialize_state_data(data: CurrentStateData) -> str:

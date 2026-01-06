@@ -38,7 +38,57 @@ def create_app():
 def register_routes(app):
     """Register all API routes."""
 
+    # ==================== ORG ENDPOINTS ====================
+
+    @app.route('/org', methods=['GET'])
+    def get_current_org():
+        """
+        Get the current user's organization.
+        For now, returns the first org found in the database.
+        
+        Returns:
+            orgId (str): The organization ID
+        """
+        orgs = db.get_all_orgs()
+        if not orgs:
+            return jsonify({'error': 'No organizations found'}), 404
+        
+        # For now, just return the first org
+        return jsonify({'orgId': orgs[0]}), 200
+
+    @app.route('/orgs', methods=['GET'])
+    def get_all_orgs():
+        """
+        Get all organizations.
+        
+        Returns:
+            orgs (list): List of organization IDs
+        """
+        orgs = db.get_all_orgs()
+        return jsonify({'orgs': orgs}), 200
+
     # ==================== MEETING ENDPOINTS ====================
+
+    @app.route('/meetings', methods=['GET'])
+    def get_meetings_by_org():
+        """
+        Get all meetings for an organization.
+        
+        Query Parameters:
+            orgId (str): The organization ID
+        
+        Returns:
+            meetings (list): List of meetings for the org
+        """
+        org_id = request.args.get('orgId')
+        
+        if not org_id:
+            return jsonify({'error': 'orgId is required'}), 400
+        
+        meetings = db.get_meetings_by_org(org_id)
+        return jsonify({
+            'meetings': [m.model_dump(mode='json') for m in meetings]
+        }), 200
 
     @app.route('/meeting', methods=['POST'])
     def create_meeting():
@@ -102,8 +152,8 @@ def register_routes(app):
             return jsonify({'error': 'No state found for meeting'}), 404
 
         return jsonify({
-            'meeting': meeting.model_dump(),
-            'currentState': latest_state.model_dump()
+            'meeting': meeting.model_dump(mode='json'),
+            'currentState': latest_state.model_dump(mode='json')
         }), 200
 
     # ==================== PROCESS ENDPOINT ====================
@@ -165,7 +215,7 @@ def register_routes(app):
         db.add_state_version(meeting_id, new_state_version)
 
         return jsonify({
-            'currentState': new_state_version.model_dump(),
+            'currentState': new_state_version.model_dump(mode='json'),
             'previousVersion': latest_state.version,
             'newVersion': new_state_version.version
         }), 200
