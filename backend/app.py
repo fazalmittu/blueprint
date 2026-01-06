@@ -102,8 +102,8 @@ def register_routes(app):
             return jsonify({'error': 'No state found for meeting'}), 404
 
         return jsonify({
-            'meeting': meeting.model_dump(),
-            'currentState': latest_state.model_dump()
+            'meeting': meeting.model_dump(mode='json'),
+            'currentState': latest_state.model_dump(mode='json')
         }), 200
 
     # ==================== PROCESS ENDPOINT ====================
@@ -165,7 +165,7 @@ def register_routes(app):
         db.add_state_version(meeting_id, new_state_version)
 
         return jsonify({
-            'currentState': new_state_version.model_dump(),
+            'currentState': new_state_version.model_dump(mode='json'),
             'previousVersion': latest_state.version,
             'newVersion': new_state_version.version
         }), 200
