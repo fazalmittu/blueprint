@@ -17,15 +17,12 @@ from models import (
 from models.meeting_schema import Status
 from models.currentStateVersion_schema import Data as CurrentStateData
 from dotenv import load_dotenv
+import database as db
 
 load_dotenv()
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-
-# In-memory storage
-meetings_store: dict[str, Meeting] = {}
-states_store: dict[str, list[CurrentStateVersion]] = {}  # meetingId -> list of state versions
 
 
 def create_app():
@@ -62,7 +59,7 @@ def register_routes(app):
             status=Status.active,
             orgId=org_id
         )
-        meetings_store[meeting_id] = meeting
+        db.create_meeting(meeting)
 
         # Create initial current state version using Pydantic model
         initial_state_data = get_initial_state()
@@ -71,7 +68,7 @@ def register_routes(app):
             currentStateId=current_state_id,
             data=initial_state_data
         )
-        states_store[meeting_id] = [state_version]
+        db.add_state_version(meeting_id, state_version)
 
         return jsonify({
             'meetingId': meeting_id,
@@ -95,16 +92,14 @@ def register_routes(app):
             return jsonify({'error': 'meetingId is required'}), 400
 
         # Find the meeting
-        meeting = meetings_store.get(meeting_id)
+        meeting = db.get_meeting(meeting_id)
         if not meeting:
             return jsonify({'error': 'Meeting not found'}), 404
 
         # Get latest current state
-        state_versions = states_store.get(meeting_id, [])
-        if not state_versions:
+        latest_state = db.get_latest_state_version(meeting_id)
+        if not latest_state:
             return jsonify({'error': 'No state found for meeting'}), 404
-
-        latest_state = state_versions[-1]
 
         return jsonify({
             'meeting': meeting.model_dump(),
@@ -143,7 +138,7 @@ def register_routes(app):
         meeting_id = process_request.meetingId
 
         # Find the meeting
-        meeting = meetings_store.get(meeting_id)
+        meeting = db.get_meeting(meeting_id)
         if not meeting:
             return jsonify({'error': 'Meeting not found'}), 404
 
@@ -151,11 +146,10 @@ def register_routes(app):
             return jsonify({'error': 'Meeting has been finalized'}), 400
 
         # Get latest current state
-        state_versions = states_store.get(meeting_id, [])
-        if not state_versions:
+        latest_state = db.get_latest_state_version(meeting_id)
+        if not latest_state:
             return jsonify({'error': 'No state found for meeting'}), 404
 
-        latest_state = state_versions[-1]
         current_state_data = latest_state.data
 
         # Process with LLM
@@ -168,7 +162,7 @@ def register_routes(app):
             currentStateId=new_current_state_id,
             data=new_state_data
         )
-        states_store[meeting_id].append(new_state_version)
+        db.add_state_version(meeting_id, new_state_version)
 
         return jsonify({
             'currentState': new_state_version.model_dump(),
