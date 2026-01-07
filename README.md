@@ -26,7 +26,6 @@ A real-time AI meeting note-taker and workflow mapping canvas. The AI processes 
 - **Infinite Canvas**: Pan, zoom, and interact with meeting content on a visual canvas
 - **Workflow Visualization**: Mermaid diagram rendering for extracted workflows
 - **Interactive Blocks**: Draggable text blocks, shapes (rectangles, circles, diamonds), and notes
-- **Drag-to-Delete**: Drag blocks to trash zone or press Backspace/Delete to remove
 
 ## Tech Stack
 
