@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, type ReactNode, type WheelEvent, type MouseEvent } from "react";
+import { CanvasProvider } from "./CanvasContext";
 
 interface InfiniteCanvasProps {
   children: ReactNode;
@@ -101,17 +102,19 @@ export function InfiniteCanvas({
       onMouseLeave={handleMouseUp}
     >
       {/* Transformed content layer */}
-      <div
-        style={{
-          transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-          transformOrigin: "0 0",
-          position: "absolute",
-          top: 0,
-          left: 0,
-        }}
-      >
-        {children}
-      </div>
+      <CanvasProvider value={transform}>
+        <div
+          style={{
+            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+            transformOrigin: "0 0",
+            position: "absolute",
+            top: 0,
+            left: 0,
+          }}
+        >
+          {children}
+        </div>
+      </CanvasProvider>
 
       {/* Controls overlay - stop propagation so clicking controls doesn't deselect */}
       <div
