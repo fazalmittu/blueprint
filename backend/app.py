@@ -586,7 +586,7 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=os.getenv('OPENAI_MODEL', 'gpt-5.2'),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
