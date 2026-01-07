@@ -1,22 +1,5 @@
 <p align="center">
-  <svg width="80" height="80" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#3b82f6"/>
-        <stop offset="100%" stop-color="#1d4ed8"/>
-      </linearGradient>
-    </defs>
-    <rect width="64" height="64" rx="14" fill="url(#bg)"/>
-    <g fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="22" y="10" width="20" height="12" rx="2" fill="#fff" fill-opacity="0.2"/>
-      <line x1="32" y1="22" x2="32" y2="28"/>
-      <rect x="18" y="28" width="28" height="14" rx="3" fill="#fff" fill-opacity="0.2"/>
-      <line x1="24" y1="42" x2="18" y2="48"/>
-      <line x1="40" y1="42" x2="46" y2="48"/>
-      <circle cx="14" cy="52" r="5" fill="#fff" fill-opacity="0.3"/>
-      <circle cx="50" cy="52" r="5" fill="#fff" fill-opacity="0.3"/>
-    </g>
-  </svg>
+  <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjM2I4MmY2Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzFkNGVkOCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgCiAgPCEtLSBSb3VuZGVkIHNxdWFyZSBiYWNrZ3JvdW5kIC0tPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIAogIDwhLS0gRmxvd2NoYXJ0IGljb24gaW4gd2hpdGUgLS0+CiAgPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj4KICAgIDwhLS0gVG9wIG5vZGUgLS0+CiAgICA8cmVjdCB4PSIyMiIgeT0iMTAiIHdpZHRoPSIyMCIgaGVpZ2h0PSIxMiIgcng9IjIiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4yIi8+CiAgICA8IS0tIExpbmUgZG93biAtLT4KICAgIDxsaW5lIHgxPSIzMiIgeTE9IjIyIiB4Mj0iMzIiIHkyPSIyOCIvPgogICAgPCEtLSBNaWRkbGUgbm9kZSAobGFyZ2VyKSAtLT4KICAgIDxyZWN0IHg9IjE4IiB5PSIyOCIgd2lkdGg9IjI4IiBoZWlnaHQ9IjE0IiByeD0iMyIgZmlsbD0iI2ZmZiIgZmlsbC1vcGFjaXR5PSIwLjIiLz4KICAgIDwhLS0gQnJhbmNoIGxpbmVzIC0tPgogICAgPGxpbmUgeDE9IjI0IiB5MT0iNDIiIHgyPSIxOCIgeTI9IjQ4Ii8+CiAgICA8bGluZSB4MT0iNDAiIHkxPSI0MiIgeDI9IjQ2IiB5Mj0iNDgiLz4KICAgIDwhLS0gQm90dG9tIG5vZGVzIC0tPgogICAgPGNpcmNsZSBjeD0iMTQiIGN5PSI1MiIgcj0iNSIgZmlsbD0iI2ZmZiIgZmlsbC1vcGFjaXR5PSIwLjMiLz4KICAgIDxjaXJjbGUgY3g9IjUwIiBjeT0iNTIiIHI9IjUiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4zIi8+CiAgPC9nPgo8L3N2Zz4K" alt="Blueprint Logo" width="80">
 </p>
 
 <h1 align="center">Blueprint</h1>
