@@ -5,202 +5,105 @@
 <h1 align="center">Blueprint</h1>
 
 <p align="center">
-  <strong>AI-powered meeting notes and workflow visualization</strong>
-</p>
-
-<p align="center">
-  <a href="#features">Features</a> •
-  <a href="#setup">Setup</a> •
-  <a href="#api-endpoints">API</a> •
-  <a href="#canvas-controls">Controls</a>
+  <strong>Turn meeting transcripts into actionable workflow diagrams</strong>
 </p>
 
 ---
 
-A real-time AI meeting note-taker and workflow mapping canvas. The AI processes meeting transcripts to extract insights, generate summaries, and create visual workflow diagrams using Mermaid.
+## The Problem
 
-## Features
+Meetings are where processes get defined, but that knowledge dies in transcripts nobody reads. Teams walk out with scattered notes, vague action items, and no shared understanding of the workflows they just discussed.
 
-- **Meeting Management**: Create and view meetings with versioned state history
-- **AI-Powered Extraction**: Automatically extracts workflows and summaries from meeting transcripts
-- **Infinite Canvas**: Pan, zoom, and interact with meeting content on a visual canvas
-- **Workflow Visualization**: Mermaid diagram rendering for extracted workflows
-- **Interactive Blocks**: Draggable text blocks, shapes (rectangles, circles, diamonds), and notes
+**Blueprint solves this.**
+
+Upload a meeting transcript and Blueprint's AI extracts the actual workflows—onboarding steps, approval chains, deployment procedures—and renders them as interactive Mermaid diagrams. As it processes the transcript chunk by chunk, you watch the workflows materialize in real-time on an infinite canvas.
+
+## How It Works
+
+1. **Upload a transcript** → Blueprint chunks it into digestible pieces
+2. **AI processes each chunk** → GPT-4o extracts workflows and key points as bullet summaries
+3. **Real-time visualization** → Watch diagrams build live via Server-Sent Events
+4. **Version history** → Scrub through processing stages to see how understanding evolved
+
+The result: a visual map of every process mentioned in your meeting, with source attribution back to the transcript.
 
 ## Tech Stack
 
-### Backend
-- Python 3.13+
-- Flask (REST API)
-- SQLite (database)
-- OpenAI GPT (transcript processing)
-- Pydantic (data validation)
+| Layer | Technology |
+|-------|------------|
+| **AI** | OpenAI GPT-4o for transcript analysis and workflow extraction |
+| **Backend** | Python, Flask, SQLite, Pydantic |
+| **Frontend** | React 18, TypeScript, Vite |
+| **Diagrams** | Mermaid.js for flowchart rendering |
+| **Real-time** | Server-Sent Events (SSE) for live processing updates |
 
-### Frontend
-- React 18 + TypeScript
-- Vite (build tool)
-- Tailwind CSS (styling)
-- Mermaid.js (diagram rendering)
-- React Router (navigation)
-
-## Project Structure
-
-```
-blueprint/
-├── backend/
-│   ├── app.py              # Flask application & API routes
-│   ├── database.py         # SQLite database operations
-│   ├── seed_db.py          # Database seeding script
-│   ├── models/             # Pydantic models (auto-generated)
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/
-│   ├── src/
-│   │   ├── api/            # API client
-│   │   ├── features/
-│   │   │   ├── home/       # Home page (org & meetings list)
-│   │   │   └── meeting/    # Meeting canvas & blocks
-│   │   ├── hooks/          # Custom React hooks
-│   │   ├── types/          # TypeScript types (auto-generated)
-│   │   └── index.css       # Design tokens & global styles
-│   └── .env.example
-├── schemas/                # JSON Schemas (source of truth)
-├── scripts/
-│   └── generate_types.sh   # Generate types from schemas
-└── blueprint.db            # SQLite database
-```
-
-## Setup
+## Quick Start
 
 ### Prerequisites
 - Python 3.13+
 - Node.js 18+
 - OpenAI API key
 
-### Backend Setup
+### Setup
 
 ```bash
+# Clone and enter
+git clone <repo> && cd blueprint
+
+# Backend
 cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cd ..
 
-# Configure environment
-cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Add your OpenAI key to root .env
+echo "OPENAI_API_KEY=your-key-here" > .env
+echo "APP_URL=http://localhost:5173" >> .env
+echo "HOST=0.0.0.0" >> .env
+echo "PORT=5001" >> .env
 
-# Seed the database with sample data
-python seed_db.py
+# Seed sample data
+cd backend && python seed_db.py && cd ..
 
-# Start the server
-python app.py
+# Frontend
+cd frontend && npm install && cd ..
 ```
 
-The backend runs on `http://localhost:5001`.
-
-### Frontend Setup
+### Run
 
 ```bash
-cd frontend
+# Terminal 1: Backend
+cd backend && source venv/bin/activate && python -m app
 
-# Install dependencies
-npm install
-
-# Configure environment
-cp .env.example .env
-
-# Start development server
-npm run dev
+# Terminal 2: Frontend
+cd frontend && npm run dev
 ```
 
-The frontend runs on `http://localhost:5173`.
+Open `http://localhost:5173`, create a meeting, paste a transcript, and watch the workflows appear.
 
-## Environment Variables
+## Project Structure
 
-### Backend (`.env`)
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key for GPT processing | Required |
-| `APP_URL` | Frontend URL (for CORS) | `http://localhost:5173` |
-| `HOST` | Server host | `0.0.0.0` |
-| `PORT` | Server port | `5001` |
-
-### Frontend (`.env`)
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VITE_API_URL` | Backend API URL | `http://localhost:5001` |
-
-## API Endpoints
-
-### Organizations
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/org` | Get current user's organization |
-| `GET` | `/orgs` | Get all organizations |
-
-### Meetings
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/meetings?orgId=<id>` | Get all meetings for an org |
-| `GET` | `/meeting?meetingId=<id>` | Get meeting with current state |
-| `POST` | `/meeting` | Create a new meeting |
-
-### Processing
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/process` | Process a transcript chunk |
+```
+blueprint/
+├── backend/
+│   ├── app.py          # Flask API + LLM processing logic
+│   ├── database.py     # SQLite operations
+│   ├── models/         # Pydantic models (auto-generated from schemas)
+│   └── seed_db.py      # Sample data seeder
+├── frontend/
+│   └── src/
+│       ├── features/meeting/  # Canvas, blocks, real-time updates
+│       └── api/client.ts      # Backend API client
+├── schemas/            # JSON Schemas (source of truth for types)
+└── .env                # Environment variables (create this)
+```
 
 ## Type Generation
 
-Types are auto-generated from JSON schemas in `/schemas`:
+Types are generated from JSON schemas to keep backend and frontend in sync:
 
 ```bash
 ./scripts/generate_types.sh
-```
-
-This generates:
-- Backend: Pydantic models in `backend/models/`
-- Frontend: TypeScript types in `frontend/src/types/generated/`
-
-## Canvas Controls
-
-- **Pan**: Click and drag on empty canvas area
-- **Zoom**: Scroll wheel (zoom toward cursor)
-- **Reset View**: Click the zoom percentage indicator
-- **Select Block**: Click on any block
-- **Move Block**: Drag from the block's handle area
-- **Delete Block**: Press `Backspace`/`Delete` or drag to trash icon (bottom-left)
-- **Add Blocks**: Use the toolbar (top center)
-
-## Database
-
-SQLite database stored at project root (`blueprint.db`).
-
-**Tables:**
-- `meetings`: Meeting records with status and org
-- `state_versions`: Versioned state snapshots for each meeting
-
-**Seed Data:**
-Run `python backend/seed_db.py` to populate with sample meetings and workflows.
-
-## Development
-
-### Linting
-```bash
-# Frontend
-cd frontend && npm run lint
-
-# Type checking
-cd frontend && npx tsc --noEmit
-```
-
-### Building
-```bash
-cd frontend && npm run build
 ```
 
 ## License
