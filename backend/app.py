@@ -542,7 +542,14 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
     - If the chunk contains instructions, critiques, or feedback about the diagrams/workflows themselves (not meeting content):
       - DO NOT update the meeting summary
       - DO apply the feedback to modify/improve the workflows accordingly
-      - This includes things like "make this more detailed", "combine these steps", etc."""
+      - This includes things like "make this more detailed", "combine these steps", etc.
+
+    CRITICAL - NEVER DELETE CONTENT:
+    - NEVER return an empty meetingSummary if there was content before
+    - NEVER return an empty workflows array if there were workflows before
+    - Always preserve and build upon existing content
+    - If a chunk doesn't add new information, return the existing state unchanged
+    - Short conversational chunks like "Great, thanks!" should NOT cause any content to be removed"""
 
     # Prepare current state for prompt (exclude chunk metadata)
     state_for_prompt = {
@@ -601,8 +608,29 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
             )
             workflows.append(workflow)
         
+        new_summary = result.get('meetingSummary', '')
+        
+        # Sanity check: don't accept a response that clears existing content
+        # If we had content before and now it's empty, preserve the old state
+        had_content = bool(current_state_data.meetingSummary) or bool(current_state_data.workflows)
+        new_is_empty = not new_summary and not workflows
+        
+        if had_content and new_is_empty:
+            print(f"Warning: LLM returned empty state, preserving previous state")
+            return current_state_data.model_copy()
+        
+        # Also check for significant data loss (had workflows, now none)
+        if current_state_data.workflows and not workflows:
+            print(f"Warning: LLM cleared all workflows, preserving previous workflows")
+            workflows = [w.model_copy() for w in current_state_data.workflows]
+        
+        # If summary was cleared but we had one, preserve it
+        if current_state_data.meetingSummary and not new_summary:
+            print(f"Warning: LLM cleared summary, preserving previous summary")
+            new_summary = current_state_data.meetingSummary
+        
         return CurrentStateData(
-            meetingSummary=result.get('meetingSummary', ''),
+            meetingSummary=new_summary,
             workflows=workflows
         )
         
