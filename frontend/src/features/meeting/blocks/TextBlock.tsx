@@ -3,9 +3,9 @@ import { DraggableBlock, type Position } from "./DraggableBlock";
 
 interface TextBlockProps {
   position: Position;
-  onPositionChange: (position: Position) => void;
+  onPositionChange: (position: Position, mouseX: number, mouseY: number) => void;
   onDragStart?: () => void;
-  onDragEnd?: () => void;
+  onDragEnd?: (mouseX: number, mouseY: number) => void;
   content: string;
   onContentChange: (content: string) => void;
   width?: number;

@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { getMeeting, type MeetingResponse } from "@/api/client";
 import { InfiniteCanvas } from "./InfiniteCanvas";
 import { Toolbar } from "./Toolbar";
@@ -156,11 +156,23 @@ function ErrorState({ message, onBack }: { message: string; onBack: () => void }
   );
 }
 
-// Trash zone - relative to viewport (5% from edges, 5% of viewport width for hit area)
-const getTrashZoneHitArea = () => ({
-  xThreshold: window.innerWidth * 0.1,
-  yThreshold: window.innerHeight * 0.1,
-});
+// Trash zone - check if mouse is near the trash icon (bottom-left corner)
+// Uses screen coordinates, not canvas coordinates
+const isMouseInTrashZone = (mouseX: number, mouseY: number) => {
+  const margin = 24; // Same as --trash-zone-margin (1.5rem)
+  const size = 56; // Same as --trash-zone-size (3.5rem)
+  const hitPadding = 30; // Extra padding around the trash icon for easier targeting
+  
+  const trashCenterX = margin + size / 2;
+  const trashCenterY = window.innerHeight - margin - size / 2;
+  
+  const distance = Math.sqrt(
+    Math.pow(mouseX - trashCenterX, 2) + 
+    Math.pow(mouseY - trashCenterY, 2)
+  );
+  
+  return distance < (size / 2 + hitPadding);
+};
 
 /**
  * Trash zone component - appears when dragging.
@@ -291,46 +303,29 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
     setSelectedBlockId(newBlock.id);
   }, []);
 
-  // Track current dragging block position for trash detection
-  const draggingPositionRef = useRef<Position | null>(null);
-
-  const handleBlockPositionChange = useCallback((blockId: string, position: Position) => {
+  const handleBlockPositionChange = useCallback((blockId: string, position: Position, mouseX: number, mouseY: number) => {
     setUserBlocks(prev => prev.map(block => 
       block.id === blockId ? { ...block, position } : block
     ));
     
-    // Store current position for trash detection
-    draggingPositionRef.current = position;
-    
-    // Check if over trash zone (bottom-left corner) - relative to viewport
-    const trashZone = getTrashZoneHitArea();
-    const isNearTrash = position.x < trashZone.xThreshold && 
-                        position.y > window.innerHeight - trashZone.yThreshold;
-    setIsOverTrash(isNearTrash);
+    // Check if mouse is over trash zone (uses screen coordinates)
+    setIsOverTrash(isMouseInTrashZone(mouseX, mouseY));
   }, []);
   
   const handleBlockDragStart = useCallback(() => {
     setIsDragging(true);
-    draggingPositionRef.current = null;
   }, []);
   
-  const handleBlockDragEnd = useCallback((blockId: string) => {
+  const handleBlockDragEnd = useCallback((blockId: string, mouseX: number, mouseY: number) => {
     setIsDragging(false);
     
-    // Check trash zone using the ref (avoids stale closure)
-    const pos = draggingPositionRef.current;
-    if (pos) {
-      const trashZone = getTrashZoneHitArea();
-      const isInTrash = pos.x < trashZone.xThreshold && 
-                        pos.y > window.innerHeight - trashZone.yThreshold;
-      if (isInTrash) {
-        setUserBlocks(prev => prev.filter(b => b.id !== blockId));
-        setSelectedBlockId(null);
-      }
+    // Check if dropped in trash zone
+    if (isMouseInTrashZone(mouseX, mouseY)) {
+      setUserBlocks(prev => prev.filter(b => b.id !== blockId));
+      setSelectedBlockId(null);
     }
     
     setIsOverTrash(false);
-    draggingPositionRef.current = null;
   }, []);
 
   const handleTextContentChange = useCallback((blockId: string, content: string) => {
@@ -410,9 +405,9 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
               <TextBlock
                 key={block.id}
                 position={block.position}
-                onPositionChange={(pos) => handleBlockPositionChange(block.id, pos)}
+                onPositionChange={(pos, mx, my) => handleBlockPositionChange(block.id, pos, mx, my)}
                 onDragStart={handleBlockDragStart}
-                onDragEnd={() => handleBlockDragEnd(block.id)}
+                onDragEnd={(mx, my) => handleBlockDragEnd(block.id, mx, my)}
                 content={block.content}
                 onContentChange={(content) => handleTextContentChange(block.id, content)}
                 width={block.width}
@@ -427,9 +422,9 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
               <ShapeBlock
                 key={block.id}
                 position={block.position}
-                onPositionChange={(pos) => handleBlockPositionChange(block.id, pos)}
+                onPositionChange={(pos, mx, my) => handleBlockPositionChange(block.id, pos, mx, my)}
                 onDragStart={handleBlockDragStart}
-                onDragEnd={() => handleBlockDragEnd(block.id)}
+                onDragEnd={(mx, my) => handleBlockDragEnd(block.id, mx, my)}
                 shape={block.shape}
                 width={block.width}
                 height={block.height}

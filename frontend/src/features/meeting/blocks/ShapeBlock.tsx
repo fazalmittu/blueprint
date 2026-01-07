@@ -19,9 +19,9 @@ const SNAP_THRESHOLD = 8;
 
 interface ShapeBlockProps {
   position: Position;
-  onPositionChange: (position: Position) => void;
+  onPositionChange: (position: Position, mouseX: number, mouseY: number) => void;
   onDragStart?: () => void;
-  onDragEnd?: () => void;
+  onDragEnd?: (mouseX: number, mouseY: number) => void;
   shape: ShapeType;
   width?: number;
   height?: number;

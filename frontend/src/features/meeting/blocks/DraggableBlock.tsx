@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode, type MouseEvent, type CSSProperties } from "react";
+import { useCanvasTransform } from "../CanvasContext";
 
 export interface Position {
   x: number;
@@ -8,9 +9,9 @@ export interface Position {
 export interface DraggableBlockProps {
   children: ReactNode;
   position: Position;
-  onPositionChange: (position: Position) => void;
+  onPositionChange: (position: Position, mouseX: number, mouseY: number) => void;
   onDragStart?: () => void;
-  onDragEnd?: () => void;
+  onDragEnd?: (mouseX: number, mouseY: number) => void;
   width?: number | "auto";
   minWidth?: number;
   selected?: boolean;
@@ -23,6 +24,7 @@ export interface DraggableBlockProps {
  * Base draggable block component.
  * - Click to select (stops propagation to prevent canvas deselecting)
  * - Drag from [data-drag-handle] elements
+ * - Accounts for canvas zoom when calculating drag movement
  */
 export function DraggableBlock({
   children,
@@ -38,7 +40,8 @@ export function DraggableBlock({
   className,
 }: DraggableBlockProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const dragOffset = useRef({ x: 0, y: 0 });
+  const canvasTransform = useCanvasTransform();
+  const dragStart = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0, scale: 1 });
 
   // Click to select - stop propagation so canvas doesn't deselect
   const handleClick = (e: MouseEvent) => {
@@ -52,23 +55,40 @@ export function DraggableBlock({
     if (!target.closest("[data-drag-handle]")) return;
 
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(true);
     onDragStart?.();
-    dragOffset.current = {
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
+    
+    // Store starting mouse position, element position, and current scale
+    dragStart.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      posX: position.x,
+      posY: position.y,
+      scale: canvasTransform.scale,
     };
 
     const handleMouseMove = (e: globalThis.MouseEvent) => {
-      onPositionChange({
-        x: e.clientX - dragOffset.current.x,
-        y: e.clientY - dragOffset.current.y,
-      });
+      // Calculate delta from drag start (in screen pixels)
+      const deltaX = e.clientX - dragStart.current.mouseX;
+      const deltaY = e.clientY - dragStart.current.mouseY;
+      
+      // Divide by scale to convert screen pixels to canvas pixels
+      // When zoomed out (scale < 1), moving 100px on screen should move more in canvas
+      const scale = dragStart.current.scale;
+      onPositionChange(
+        {
+          x: dragStart.current.posX + deltaX / scale,
+          y: dragStart.current.posY + deltaY / scale,
+        },
+        e.clientX,
+        e.clientY
+      );
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: globalThis.MouseEvent) => {
       setIsDragging(false);
-      onDragEnd?.();
+      onDragEnd?.(e.clientX, e.clientY);
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
