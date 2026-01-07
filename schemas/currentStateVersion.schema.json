@@ -11,6 +11,14 @@
         "workflows": {
           "type": "array",
           "items": { "$ref": "workflow.schema.json" }
+        },
+        "chunkIndex": {
+          "type": "integer",
+          "description": "Index of the chunk that produced this version (0-based)"
+        },
+        "chunkText": {
+          "type": "string",
+          "description": "The text of the chunk that was processed"
         }
       },
       "required": ["meetingSummary", "workflows"]

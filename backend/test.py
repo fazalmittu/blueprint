@@ -12,8 +12,10 @@ import json
 import sys
 from openai import OpenAI
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+# Load .env from project root
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))

@@ -17,6 +17,8 @@ export interface MeetingsResponse {
     meetingId: string;
     status: "active" | "finalized";
     orgId: string;
+    transcript?: string;
+    totalChunks?: number;
   }[];
 }
 
@@ -25,6 +27,8 @@ export interface MeetingResponse {
     meetingId: string;
     status: "active" | "finalized";
     orgId: string;
+    transcript?: string;
+    totalChunks?: number;
   };
   currentState: {
     version: number;
@@ -37,8 +41,38 @@ export interface MeetingResponse {
         mermaidDiagram: string;
         sources: string[];
       }[];
+      chunkIndex?: number;
+      chunkText?: string;
     };
   };
+}
+
+export interface VersionInfo {
+  version: number;
+  currentStateId: string;
+  chunkIndex?: number;
+  chunkText?: string;
+}
+
+export interface MeetingVersionsResponse {
+  meeting: MeetingResponse["meeting"];
+  versions: VersionInfo[];
+  totalVersions: number;
+}
+
+export interface CreateMeetingResponse {
+  meetingId: string;
+  currentStateId: string;
+  totalChunks?: number;
+}
+
+export interface SSEMessage {
+  type: "connected" | "processing_started" | "chunk_processed" | "processing_complete" | "keepalive";
+  meetingId?: string;
+  chunkIndex?: number;
+  totalChunks?: number;
+  version?: number;
+  currentState?: MeetingResponse["currentState"];
 }
 
 /**
@@ -70,10 +104,67 @@ export async function getMeetingsByOrg(orgId: string): Promise<MeetingsResponse>
 
 /**
  * Get a specific meeting with its current state.
+ * @param version - Optional specific version to fetch (defaults to latest)
  */
-export async function getMeeting(meetingId: string): Promise<MeetingResponse> {
-  const res = await fetch(`${API_BASE}/meeting?meetingId=${encodeURIComponent(meetingId)}`);
+export async function getMeeting(meetingId: string, version?: number): Promise<MeetingResponse> {
+  let url = `${API_BASE}/meeting?meetingId=${encodeURIComponent(meetingId)}`;
+  if (version !== undefined) {
+    url += `&version=${version}`;
+  }
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch meeting");
   return res.json();
 }
 
+/**
+ * Get all state versions for a meeting (for sidebar navigation).
+ */
+export async function getMeetingVersions(meetingId: string): Promise<MeetingVersionsResponse> {
+  const res = await fetch(`${API_BASE}/meeting/${encodeURIComponent(meetingId)}/versions`);
+  if (!res.ok) throw new Error("Failed to fetch meeting versions");
+  return res.json();
+}
+
+/**
+ * Create a new meeting, optionally with a transcript.
+ */
+export async function createMeeting(orgId: string, transcript?: string): Promise<CreateMeetingResponse> {
+  const res = await fetch(`${API_BASE}/meeting`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orgId, transcript }),
+  });
+  if (!res.ok) throw new Error("Failed to create meeting");
+  return res.json();
+}
+
+/**
+ * Subscribe to real-time updates for a meeting via Server-Sent Events.
+ * Returns an EventSource that emits SSEMessage events.
+ */
+export function subscribeMeetingUpdates(
+  meetingId: string,
+  onMessage: (message: SSEMessage) => void,
+  onError?: (error: Event) => void
+): EventSource {
+  const eventSource = new EventSource(`${API_BASE}/meeting/${encodeURIComponent(meetingId)}/stream`);
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data) as SSEMessage;
+      onMessage(message);
+    } catch (e) {
+      console.error("Failed to parse SSE message:", e);
+    }
+  };
+  
+  eventSource.onerror = (error) => {
+    if (onError) {
+      onError(error);
+    } else {
+      console.error("SSE error:", error);
+    }
+  };
+  
+  return eventSource;
+}

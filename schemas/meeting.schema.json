@@ -4,8 +4,15 @@
   "properties": {
     "meetingId": { "type": "string" },
     "status": { "enum": ["active", "finalized"] },
-    "orgId": { "type": "string" }
+    "orgId": { "type": "string" },
+    "transcript": { 
+      "type": "string",
+      "description": "The full transcript text uploaded by user"
+    },
+    "totalChunks": {
+      "type": "integer",
+      "description": "Total number of chunks in the transcript"
+    }
   },
   "required": ["meetingId", "status", "orgId"]
 }
-

@@ -9,5 +9,13 @@ export interface Meeting {
   meetingId: string;
   status: "active" | "finalized";
   orgId: string;
+  /**
+   * The full transcript text uploaded by user
+   */
+  transcript?: string;
+  /**
+   * Total number of chunks in the transcript
+   */
+  totalChunks?: number;
   [k: string]: unknown;
 }

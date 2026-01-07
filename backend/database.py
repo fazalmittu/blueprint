@@ -43,12 +43,14 @@ def init_db():
     with get_db() as conn:
         cursor = conn.cursor()
         
-        # Create meetings table
+        # Create meetings table (with new columns)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS meetings (
                 meeting_id TEXT PRIMARY KEY,
                 status TEXT NOT NULL,
-                org_id TEXT NOT NULL
+                org_id TEXT NOT NULL,
+                transcript TEXT,
+                total_chunks INTEGER
             )
         ''')
         
@@ -70,6 +72,22 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_state_versions_meeting_id 
             ON state_versions(meeting_id)
         ''')
+        
+        # Migration: add transcript and total_chunks columns if they don't exist
+        _migrate_add_transcript_columns(cursor)
+
+
+def _migrate_add_transcript_columns(cursor):
+    """Add transcript and total_chunks columns if they don't exist."""
+    # Check if transcript column exists
+    cursor.execute("PRAGMA table_info(meetings)")
+    columns = [col[1] for col in cursor.fetchall()]
+    
+    if 'transcript' not in columns:
+        cursor.execute('ALTER TABLE meetings ADD COLUMN transcript TEXT')
+    
+    if 'total_chunks' not in columns:
+        cursor.execute('ALTER TABLE meetings ADD COLUMN total_chunks INTEGER')
 
 
 # ==================== MEETING OPERATIONS ====================
@@ -79,8 +97,15 @@ def create_meeting(meeting: Meeting) -> None:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            'INSERT INTO meetings (meeting_id, status, org_id) VALUES (?, ?, ?)',
-            (meeting.meetingId, meeting.status.value, meeting.orgId)
+            '''INSERT INTO meetings (meeting_id, status, org_id, transcript, total_chunks) 
+               VALUES (?, ?, ?, ?, ?)''',
+            (
+                meeting.meetingId, 
+                meeting.status.value, 
+                meeting.orgId,
+                meeting.transcript,
+                meeting.totalChunks
+            )
         )
 
 
@@ -89,7 +114,7 @@ def get_meeting(meeting_id: str) -> Optional[Meeting]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            'SELECT meeting_id, status, org_id FROM meetings WHERE meeting_id = ?',
+            'SELECT meeting_id, status, org_id, transcript, total_chunks FROM meetings WHERE meeting_id = ?',
             (meeting_id,)
         )
         row = cursor.fetchone()
@@ -100,7 +125,9 @@ def get_meeting(meeting_id: str) -> Optional[Meeting]:
         return Meeting(
             meetingId=row['meeting_id'],
             status=Status(row['status']),
-            orgId=row['org_id']
+            orgId=row['org_id'],
+            transcript=row['transcript'],
+            totalChunks=row['total_chunks']
         )
 
 
@@ -111,6 +138,17 @@ def update_meeting_status(meeting_id: str, status: Status) -> bool:
         cursor.execute(
             'UPDATE meetings SET status = ? WHERE meeting_id = ?',
             (status.value, meeting_id)
+        )
+        return cursor.rowcount > 0
+
+
+def update_meeting_transcript(meeting_id: str, transcript: str, total_chunks: int) -> bool:
+    """Update a meeting's transcript and total chunks."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE meetings SET transcript = ?, total_chunks = ? WHERE meeting_id = ?',
+            (transcript, total_chunks, meeting_id)
         )
         return cursor.rowcount > 0
 
@@ -129,7 +167,7 @@ def get_meetings_by_org(org_id: str) -> list[Meeting]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            'SELECT meeting_id, status, org_id FROM meetings WHERE org_id = ? ORDER BY meeting_id',
+            'SELECT meeting_id, status, org_id, transcript, total_chunks FROM meetings WHERE org_id = ? ORDER BY meeting_id',
             (org_id,)
         )
         rows = cursor.fetchall()
@@ -139,7 +177,9 @@ def get_meetings_by_org(org_id: str) -> list[Meeting]:
             meeting = Meeting(
                 meetingId=row['meeting_id'],
                 status=Status(row['status']),
-                orgId=row['org_id']
+                orgId=row['org_id'],
+                transcript=row['transcript'],
+                totalChunks=row['total_chunks']
             )
             meetings.append(meeting)
         
@@ -170,7 +210,9 @@ def _deserialize_state_data(json_str: str) -> CurrentStateData:
     
     return CurrentStateData(
         meetingSummary=data_dict.get('meetingSummary', ''),
-        workflows=workflows
+        workflows=workflows,
+        chunkIndex=data_dict.get('chunkIndex'),
+        chunkText=data_dict.get('chunkText')
     )
 
 
@@ -240,6 +282,28 @@ def get_latest_state_version(meeting_id: str) -> Optional[CurrentStateVersion]:
         )
 
 
+def get_state_version(meeting_id: str, version: int) -> Optional[CurrentStateVersion]:
+    """Get a specific state version for a meeting."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            '''SELECT version, current_state_id, data_json 
+               FROM state_versions 
+               WHERE meeting_id = ? AND version = ?''',
+            (meeting_id, version)
+        )
+        row = cursor.fetchone()
+        
+        if row is None:
+            return None
+        
+        return CurrentStateVersion(
+            version=row['version'],
+            currentStateId=row['current_state_id'],
+            data=_deserialize_state_data(row['data_json'])
+        )
+
+
 def get_state_version_count(meeting_id: str) -> int:
     """Get the count of state versions for a meeting."""
     with get_db() as conn:
@@ -253,4 +317,3 @@ def get_state_version_count(meeting_id: str) -> int:
 
 # Initialize the database on module import
 init_db()
-

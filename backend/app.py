@@ -2,6 +2,7 @@ import os
 import re
 import json
 import uuid
+import threading
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
@@ -18,12 +19,17 @@ from models import (
 from models.meeting_schema import Status
 from models.currentStateVersion_schema import Data as CurrentStateData
 from dotenv import load_dotenv
+from pathlib import Path
 import database as db
 
-load_dotenv()
+# Load .env from project root
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+# Store for SSE connections (meeting_id -> list of queues)
+sse_connections: dict[str, list] = {}
 
 
 def create_app():
@@ -98,21 +104,38 @@ def register_routes(app):
     @app.route('/meeting', methods=['POST'])
     def create_meeting():
         """
-        Create a new meeting with an initial current state.
+        Create a new meeting with an optional transcript.
+        
+        Request Body:
+            orgId (str): The organization ID
+            transcript (str, optional): The full transcript to process
         
         Returns:
             meetingId (uuid): The unique identifier for the meeting
             currentStateId (uuid): The unique identifier for the initial state
+            totalChunks (int): Number of chunks if transcript provided
         """
         meeting_id = str(uuid.uuid4())
         current_state_id = str(uuid.uuid4())
-        org_id = request.get_json().get('orgId', 'default') if request.get_json() else 'default'
+        data = request.get_json() or {}
+        org_id = data.get('orgId', 'default')
+        transcript = data.get('transcript')
+
+        # Chunk the transcript if provided
+        chunks = []
+        total_chunks = 0
+        if transcript:
+            chunks = chunk_transcript(transcript)
+            total_chunks = len(chunks)
 
         # Create meeting using Pydantic model
+        status = Status.active
         meeting = Meeting(
             meetingId=meeting_id,
-            status=Status.active,
-            orgId=org_id
+            status=status,
+            orgId=org_id,
+            transcript=transcript,
+            totalChunks=total_chunks if total_chunks > 0 else None
         )
         db.create_meeting(meeting)
 
@@ -125,23 +148,37 @@ def register_routes(app):
         )
         db.add_state_version(meeting_id, state_version)
 
-        return jsonify({
+        response_data = {
             'meetingId': meeting_id,
-            'currentStateId': current_state_id
-        }), 201
+            'currentStateId': current_state_id,
+        }
+        
+        if total_chunks > 0:
+            response_data['totalChunks'] = total_chunks
+            
+            # Start background processing automatically
+            def process_in_background():
+                process_transcript_chunks(meeting_id, chunks)
+            
+            thread = threading.Thread(target=process_in_background, daemon=True)
+            thread.start()
+
+        return jsonify(response_data), 201
 
     @app.route('/meeting', methods=['GET'])
     def get_meeting():
         """
-        Get the latest current state version for a meeting.
+        Get the current state version for a meeting.
         
         Query Parameters:
             meetingId (uuid): The meeting ID to fetch state for
+            version (int, optional): Specific version to fetch (defaults to latest)
         
         Returns:
-            The latest current state version
+            The meeting info and requested state version
         """
         meeting_id = request.args.get('meetingId')
+        version = request.args.get('version', type=int)
 
         if not meeting_id:
             return jsonify({'error': 'meetingId is required'}), 400
@@ -151,15 +188,136 @@ def register_routes(app):
         if not meeting:
             return jsonify({'error': 'Meeting not found'}), 404
 
-        # Get latest current state
-        latest_state = db.get_latest_state_version(meeting_id)
-        if not latest_state:
-            return jsonify({'error': 'No state found for meeting'}), 404
+        # Get requested state version
+        if version is not None:
+            state = db.get_state_version(meeting_id, version)
+            if not state:
+                return jsonify({'error': f'Version {version} not found'}), 404
+        else:
+            state = db.get_latest_state_version(meeting_id)
+            if not state:
+                return jsonify({'error': 'No state found for meeting'}), 404
 
         return jsonify({
             'meeting': meeting.model_dump(mode='json'),
-            'currentState': latest_state.model_dump(mode='json')
+            'currentState': state.model_dump(mode='json')
         }), 200
+
+    @app.route('/meeting/<meeting_id>/versions', methods=['GET'])
+    def get_meeting_versions(meeting_id: str):
+        """
+        Get all state versions for a meeting (for sidebar navigation).
+        
+        Returns:
+            versions (list): List of version metadata (version number, chunkIndex, chunkText preview)
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        versions = db.get_all_state_versions(meeting_id)
+        
+        # Return lightweight version info for sidebar
+        version_info = []
+        for v in versions:
+            info = {
+                'version': v.version,
+                'currentStateId': v.currentStateId,
+            }
+            if v.data.chunkIndex is not None:
+                info['chunkIndex'] = v.data.chunkIndex
+            if v.data.chunkText:
+                # Truncate chunk text for preview
+                info['chunkText'] = v.data.chunkText[:100] + ('...' if len(v.data.chunkText) > 100 else '')
+            version_info.append(info)
+        
+        return jsonify({
+            'meeting': meeting.model_dump(mode='json'),
+            'versions': version_info,
+            'totalVersions': len(versions)
+        }), 200
+
+    @app.route('/meeting/<meeting_id>/process', methods=['POST'])
+    def process_meeting_transcript(meeting_id: str):
+        """
+        Process the meeting's transcript chunk by chunk.
+        This runs synchronously for simplicity but returns updates via SSE.
+        
+        Returns immediately with status, processing happens in background.
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        if not meeting.transcript:
+            return jsonify({'error': 'Meeting has no transcript'}), 400
+        
+        if meeting.status == Status.finalized:
+            return jsonify({'error': 'Meeting has been finalized'}), 400
+        
+        # Chunk the transcript
+        chunks = chunk_transcript(meeting.transcript)
+        
+        # Start background processing
+        def process_in_background():
+            process_transcript_chunks(meeting_id, chunks)
+        
+        thread = threading.Thread(target=process_in_background, daemon=True)
+        thread.start()
+        
+        return jsonify({
+            'status': 'processing',
+            'totalChunks': len(chunks),
+            'message': 'Processing started. Connect to SSE endpoint for updates.'
+        }), 202
+
+    @app.route('/meeting/<meeting_id>/stream')
+    def stream_meeting_updates(meeting_id: str):
+        """
+        Server-Sent Events endpoint for real-time updates during processing.
+        """
+        from queue import Queue
+        
+        def generate():
+            # Create a queue for this connection
+            q = Queue()
+            
+            # Register this connection
+            if meeting_id not in sse_connections:
+                sse_connections[meeting_id] = []
+            sse_connections[meeting_id].append(q)
+            
+            try:
+                # Send initial connection message
+                yield f"data: {json.dumps({'type': 'connected', 'meetingId': meeting_id})}\n\n"
+                
+                # Keep connection alive and send updates
+                while True:
+                    try:
+                        # Wait for updates (with timeout for keepalive)
+                        message = q.get(timeout=30)
+                        if message is None:
+                            break
+                        yield f"data: {json.dumps(message)}\n\n"
+                    except:
+                        # Send keepalive
+                        yield f"data: {json.dumps({'type': 'keepalive'})}\n\n"
+            finally:
+                # Cleanup
+                if meeting_id in sse_connections:
+                    sse_connections[meeting_id].remove(q)
+                    if not sse_connections[meeting_id]:
+                        del sse_connections[meeting_id]
+        
+        return app.response_class(
+            generate(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no'
+            }
+        )
 
     # ==================== PROCESS ENDPOINT ====================
 
@@ -224,6 +382,68 @@ def register_routes(app):
             'previousVersion': latest_state.version,
             'newVersion': new_state_version.version
         }), 200
+
+
+def broadcast_to_meeting(meeting_id: str, message: dict):
+    """Broadcast a message to all SSE connections for a meeting."""
+    if meeting_id in sse_connections:
+        for q in sse_connections[meeting_id]:
+            q.put(message)
+
+
+def process_transcript_chunks(meeting_id: str, chunks: list[str]):
+    """
+    Process all chunks for a meeting sequentially.
+    Broadcasts updates via SSE after each chunk.
+    """
+    total_chunks = len(chunks)
+    
+    # Notify processing started
+    broadcast_to_meeting(meeting_id, {
+        'type': 'processing_started',
+        'totalChunks': total_chunks
+    })
+    
+    for i, chunk in enumerate(chunks):
+        # Get latest state
+        latest_state = db.get_latest_state_version(meeting_id)
+        if not latest_state:
+            break
+        
+        # Process with LLM
+        new_state_data = process_with_llm(latest_state.data, chunk, latest_state.version, i, chunk)
+        
+        # Create new version
+        new_current_state_id = str(uuid.uuid4())
+        new_state_version = CurrentStateVersion(
+            version=latest_state.version + 1,
+            currentStateId=new_current_state_id,
+            data=new_state_data
+        )
+        db.add_state_version(meeting_id, new_state_version)
+        
+        # Broadcast update
+        broadcast_to_meeting(meeting_id, {
+            'type': 'chunk_processed',
+            'chunkIndex': i,
+            'totalChunks': total_chunks,
+            'version': new_state_version.version,
+            'currentState': new_state_version.model_dump(mode='json')
+        })
+    
+    # Update meeting status to finalized
+    db.update_meeting_status(meeting_id, Status.finalized)
+    
+    # Notify processing complete
+    broadcast_to_meeting(meeting_id, {
+        'type': 'processing_complete',
+        'totalChunks': total_chunks
+    })
+    
+    # Close SSE connections for this meeting
+    if meeting_id in sse_connections:
+        for q in sse_connections[meeting_id]:
+            q.put(None)
 
 
 # ==================== HELPER FUNCTIONS ====================
@@ -314,8 +534,14 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
     - Only create workflows for actual processes/procedures described
     - Each workflow should have a descriptive title and mermaid diagram"""
 
+    # Prepare current state for prompt (exclude chunk metadata)
+    state_for_prompt = {
+        'meetingSummary': current_state_data.meetingSummary,
+        'workflows': [w.model_dump() for w in current_state_data.workflows] if current_state_data.workflows else []
+    }
+
     user_prompt = f"""Current State:
-    {json.dumps(current_state_data.model_dump(), indent=2)}
+    {json.dumps(state_for_prompt, indent=2)}
 
     New Chunk (index {chunk_index}):
     "{chunk}"
@@ -337,7 +563,7 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
 
     try:
         response = client.chat.completions.create(
-            model="gpt-5.2",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -370,7 +596,7 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
         return current_state_data.model_copy()
 
 
-def process_with_llm(current_state_data: CurrentStateData, chunk: str, version: int = 0) -> CurrentStateData:
+def process_with_llm(current_state_data: CurrentStateData, chunk: str, version: int = 0, chunk_index: int = None, chunk_text: str = None) -> CurrentStateData:
     """
     Process a chunk using LLM and update the state.
     
@@ -378,6 +604,8 @@ def process_with_llm(current_state_data: CurrentStateData, chunk: str, version: 
         current_state_data: The current state data
         chunk: The new text chunk to process
         version: The current version number (for chunk index calculation)
+        chunk_index: Optional explicit chunk index
+        chunk_text: Optional chunk text to store in the version
     
     Returns:
         Updated CurrentStateData after processing
@@ -386,11 +614,16 @@ def process_with_llm(current_state_data: CurrentStateData, chunk: str, version: 
     if current_state_data is None:
         current_state_data = get_initial_state()
     
-    # Calculate chunk index based on version
-    chunk_index = version
+    # Calculate chunk index based on version if not provided
+    if chunk_index is None:
+        chunk_index = version
     
     # Process the chunk with GPT
     updated_state = pass_chunk(chunk, current_state_data, chunk_index)
+    
+    # Add chunk metadata to the state
+    updated_state.chunkIndex = chunk_index
+    updated_state.chunkText = chunk_text if chunk_text else chunk
     
     return updated_state
 
@@ -410,20 +643,20 @@ def process_full_transcript(transcript: str, verbose: bool = True) -> CurrentSta
     current_state_data = get_initial_state()
     
     if verbose:
-        print(f"\n📝 Transcript chunked into {len(chunks)} chunks\n")
+        print(f"\n Transcript chunked into {len(chunks)} chunks\n")
         print("=" * 60)
     
     for i, chunk in enumerate(chunks):
         if verbose:
-            print(f"\n🔄 Processing chunk {i + 1}/{len(chunks)}...")
+            print(f"\n Processing chunk {i + 1}/{len(chunks)}...")
             print(f"   Chunk: \"{chunk[:80]}{'...' if len(chunk) > 80 else ''}\"")
         
         current_state_data = pass_chunk(chunk, current_state_data, i)
         
         if verbose:
-            print(f"   ✅ Processed chunk {i + 1}")
-            print(f"   📄 Summary length: {len(current_state_data.meetingSummary)} chars")
-            print(f"   🔀 Workflows: {len(current_state_data.workflows)}")
+            print(f"   Processed chunk {i + 1}")
+            print(f"   Summary length: {len(current_state_data.meetingSummary)} chars")
+            print(f"   Workflows: {len(current_state_data.workflows)}")
     
     return current_state_data
 
@@ -435,4 +668,4 @@ if __name__ == '__main__':
     app = create_app()
     host = os.getenv('HOST', '0.0.0.0')
     port = int(os.getenv('PORT', '5001'))
-    app.run(host=host, port=port, debug=True)
+    app.run(host=host, port=port, debug=True, threaded=True)

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCurrentOrg, getMeetingsByOrg, type MeetingsResponse } from "@/api/client";
+import { getCurrentOrg, getMeetingsByOrg, createMeeting, type MeetingsResponse } from "@/api/client";
+import { UploadTranscriptModal } from "./UploadTranscriptModal";
 
 type Meeting = MeetingsResponse["meetings"][number];
 
@@ -10,6 +11,7 @@ export function Home() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -27,6 +29,16 @@ export function Home() {
     }
     load();
   }, []);
+
+  const handleCreateMeeting = useCallback(async (transcript: string) => {
+    if (!orgId) return;
+    
+    // Create meeting with transcript
+    const result = await createMeeting(orgId, transcript);
+    
+    // Navigate to the meeting page - it will start processing
+    navigate(`/meeting/${result.meetingId}`);
+  }, [orgId, navigate]);
 
   if (loading) {
     return (
@@ -48,7 +60,7 @@ export function Home() {
     <div className="home-container">
       <header className="home-header">
         <h1>{orgId}</h1>
-        <button className="new-meeting-btn" onClick={() => {}}>
+        <button className="new-meeting-btn" onClick={() => setShowUploadModal(true)}>
           New Meeting
         </button>
       </header>
@@ -65,7 +77,12 @@ export function Home() {
                 className="meeting-card"
                 onClick={() => navigate(`/meeting/${meeting.meetingId}`)}
               >
-                <div className="meeting-id">{meeting.meetingId.slice(0, 8)}...</div>
+                <div className="meeting-info">
+                  <div className="meeting-id">{meeting.meetingId.slice(0, 8)}...</div>
+                  {meeting.totalChunks && (
+                    <div className="meeting-chunks">{meeting.totalChunks} chunks</div>
+                  )}
+                </div>
                 <span className={`status-badge ${meeting.status}`}>
                   {meeting.status}
                 </span>
@@ -74,6 +91,12 @@ export function Home() {
           </ul>
         )}
       </section>
+
+      <UploadTranscriptModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onSubmit={handleCreateMeeting}
+      />
 
       <style>{`
         .home-container {
@@ -154,10 +177,21 @@ export function Home() {
           box-shadow: var(--shadow-card);
         }
 
+        .meeting-info {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
         .meeting-id {
           font-family: var(--font-mono);
           font-size: 0.875rem;
           color: var(--text-primary);
+        }
+
+        .meeting-chunks {
+          font-size: 0.6875rem;
+          color: var(--text-muted);
         }
 
         .status-badge {
@@ -192,4 +226,3 @@ export function Home() {
     </div>
   );
 }
-

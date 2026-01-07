@@ -11,6 +11,14 @@ export interface CurrentStateVersion {
   data: {
     meetingSummary: string;
     workflows: Workflow[];
+    /**
+     * Index of the chunk that produced this version (0-based)
+     */
+    chunkIndex?: number;
+    /**
+     * The text of the chunk that was processed
+     */
+    chunkText?: string;
     [k: string]: unknown;
   };
   [k: string]: unknown;
