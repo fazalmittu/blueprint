@@ -1,4 +1,19 @@
-# Blueprint
+<p align="center">
+  <img src="assets/logo.svg" alt="Blueprint Logo" width="400">
+</p>
+
+<p align="center">
+  <strong>AI-powered meeting notes and workflow visualization</strong>
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#setup">Setup</a> •
+  <a href="#api-endpoints">API</a> •
+  <a href="#canvas-controls">Controls</a>
+</p>
+
+---
 
 A real-time AI meeting note-taker and workflow mapping canvas. The AI processes meeting transcripts to extract insights, generate summaries, and create visual workflow diagrams using Mermaid.
 
