@@ -1,6 +1,8 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Blueprint Logo" width="400">
+  <img src="assets/logo.svg" alt="Blueprint Logo" width="80">
 </p>
+
+<h1 align="center">Blueprint</h1>
 
 <p align="center">
   <strong>AI-powered meeting notes and workflow visualization</strong>
