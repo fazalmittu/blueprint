@@ -20,6 +20,8 @@ const SNAP_THRESHOLD = 8;
 interface ShapeBlockProps {
   position: Position;
   onPositionChange: (position: Position) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
   shape: ShapeType;
   width?: number;
   height?: number;
@@ -39,6 +41,8 @@ interface ShapeBlockProps {
 export function ShapeBlock({
   position,
   onPositionChange,
+  onDragStart,
+  onDragEnd,
   shape,
   width = 100,
   height = 100, // Default to square/circle
@@ -221,6 +225,8 @@ export function ShapeBlock({
     <DraggableBlock
       position={position}
       onPositionChange={onPositionChange}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       width="auto"
       selected={selected}
       onSelect={onSelect}

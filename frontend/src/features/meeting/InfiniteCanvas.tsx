@@ -133,8 +133,8 @@ export function InfiniteCanvas({
         <button
           onClick={() => setTransform(prev => ({ ...prev, scale: Math.max(minZoom, prev.scale - 0.1) }))}
           style={{
-            width: "32px",
-            height: "32px",
+            width: "var(--space-xl)",
+            height: "var(--space-xl)",
             border: "none",
             background: "transparent",
             cursor: "pointer",
@@ -153,7 +153,7 @@ export function InfiniteCanvas({
           onClick={resetView}
           style={{
             padding: "0 var(--space-sm)",
-            height: "32px",
+            height: "var(--space-xl)",
             border: "none",
             background: "transparent",
             cursor: "pointer",
@@ -161,7 +161,7 @@ export function InfiniteCanvas({
             fontSize: "0.75rem",
             fontFamily: "var(--font-mono)",
             color: "var(--text-secondary)",
-            minWidth: "48px",
+            minWidth: "var(--space-2xl)",
           }}
           title="Reset view"
         >
@@ -170,8 +170,8 @@ export function InfiniteCanvas({
         <button
           onClick={() => setTransform(prev => ({ ...prev, scale: Math.min(maxZoom, prev.scale + 0.1) }))}
           style={{
-            width: "32px",
-            height: "32px",
+            width: "var(--space-xl)",
+            height: "var(--space-xl)",
             border: "none",
             background: "transparent",
             cursor: "pointer",

@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { getMeeting, type MeetingResponse } from "@/api/client";
 import { InfiniteCanvas } from "./InfiniteCanvas";
 import { Toolbar } from "./Toolbar";
@@ -37,13 +37,18 @@ type UserBlock = TextBlockState | ShapeBlockState;
 
 /**
  * Calculate non-overlapping positions for workflow cards.
+ * Uses viewport-relative values.
  */
 function getWorkflowPosition(index: number): Position {
-  const CARD_WIDTH = 480;
-  const GAP_X = 60;
-  const START_X = 380;
-  const START_Y = 80;
-  const ROW_HEIGHT = 450;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  
+  // Card takes ~30% of viewport width, gap is 3%
+  const CARD_WIDTH = vw * 0.3;
+  const GAP_X = vw * 0.03;
+  const START_X = vw * 0.25; // Start at 25% from left (after notes block)
+  const START_Y = vh * 0.12; // Start 12% from top (below header)
+  const ROW_HEIGHT = vh * 0.55; // Each row takes 55% of viewport height
   
   const col = index % 2;
   const row = Math.floor(index / 2);
@@ -51,6 +56,26 @@ function getWorkflowPosition(index: number): Position {
   return {
     x: START_X + col * (CARD_WIDTH + GAP_X),
     y: START_Y + row * ROW_HEIGHT,
+  };
+}
+
+/**
+ * Get initial position for notes block - relative to viewport.
+ */
+function getNotesPosition(): Position {
+  return {
+    x: window.innerWidth * 0.02,
+    y: window.innerHeight * 0.12,
+  };
+}
+
+/**
+ * Get initial position for new blocks - center of visible area.
+ */
+function getNewBlockPosition(): Position {
+  return {
+    x: window.innerWidth * 0.4,
+    y: window.innerHeight * 0.3,
   };
 }
 
@@ -131,6 +156,53 @@ function ErrorState({ message, onBack }: { message: string; onBack: () => void }
   );
 }
 
+// Trash zone - relative to viewport (5% from edges, 5% of viewport width for hit area)
+const getTrashZoneHitArea = () => ({
+  xThreshold: window.innerWidth * 0.1,
+  yThreshold: window.innerHeight * 0.1,
+});
+
+/**
+ * Trash zone component - appears when dragging.
+ */
+function TrashZone({ isOver }: { isOver: boolean }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: "var(--trash-zone-margin)",
+        left: "var(--trash-zone-margin)",
+        width: "var(--trash-zone-size)",
+        height: "var(--trash-zone-size)",
+        borderRadius: "50%",
+        background: isOver ? "#fee2e2" : "var(--bg-elevated)",
+        border: isOver ? "2px solid var(--error)" : "2px dashed var(--border-default)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transition: "all var(--transition-fast)",
+        transform: isOver ? "scale(1.1)" : "scale(1)",
+        zIndex: 1000,
+        pointerEvents: "none",
+      }}
+    >
+      <svg
+        width="1.5rem"
+        height="1.5rem"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={isOver ? "var(--error)" : "var(--text-muted)"}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <polyline points="3 6 5 6 21 6" />
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </svg>
+    </div>
+  );
+}
+
 /**
  * Main meeting canvas content.
  */
@@ -142,8 +214,8 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
   // Workflow positions (keyed by workflow ID)
   const [workflowPositions, setWorkflowPositions] = useState<Record<string, Position>>({});
   
-  // Notes block state
-  const [notesPosition, setNotesPosition] = useState<Position>({ x: 40, y: 80 });
+  // Notes block state - initialize with viewport-relative position
+  const [notesPosition, setNotesPosition] = useState<Position>(() => getNotesPosition());
   const [notesContent, setNotesContent] = useState<string>(state.meetingSummary);
   
   // User-created blocks
@@ -151,6 +223,33 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
   
   // Selection state
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  
+  // Drag state for trash zone
+  const [isDragging, setIsDragging] = useState(false);
+  const [isOverTrash, setIsOverTrash] = useState(false);
+
+  // Keyboard delete handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only delete if a user block is selected (not notes or workflows)
+      if ((e.key === "Backspace" || e.key === "Delete") && selectedBlockId) {
+        // Don't delete if user is typing in an editable element
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl as HTMLElement).isContentEditable) {
+          return;
+        }
+        // Check if it's a user block (starts with "text-" or "shape-")
+        if (selectedBlockId.startsWith("text-") || selectedBlockId.startsWith("shape-")) {
+          e.preventDefault();
+          setUserBlocks(prev => prev.filter(b => b.id !== selectedBlockId));
+          setSelectedBlockId(null);
+        }
+      }
+    };
+    
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedBlockId]);
 
   const getWorkflowPos = useCallback((workflowId: string, index: number): Position => {
     return workflowPositions[workflowId] || getWorkflowPosition(index);
@@ -161,27 +260,30 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
   }, []);
 
   const handleAddText = useCallback(() => {
+    const vw = window.innerWidth;
     const newBlock: TextBlockState = {
       type: "text",
       id: `text-${Date.now()}`,
-      position: { x: 400, y: 200 },
+      position: getNewBlockPosition(),
       content: "",
-      width: 200,
+      width: Math.max(vw * 0.12, 150), // 12% of viewport, min 150px
     };
     setUserBlocks(prev => [...prev, newBlock]);
     setSelectedBlockId(newBlock.id);
   }, []);
 
   const handleAddShape = useCallback((shape: ShapeType) => {
+    const vw = window.innerWidth;
     const colors: ShapeColor[] = ["blue", "green", "amber", "rose", "purple"];
     const isSquare = shape === "circle" || shape === "diamond";
+    const baseSize = Math.max(vw * 0.06, 80); // 6% of viewport, min 80px
     const newBlock: ShapeBlockState = {
       type: "shape",
       id: `shape-${Date.now()}`,
-      position: { x: 400, y: 200 },
+      position: getNewBlockPosition(),
       shape,
-      width: isSquare ? 100 : 140,
-      height: 100,
+      width: isSquare ? baseSize : baseSize * 1.4,
+      height: baseSize,
       color: colors[Math.floor(Math.random() * colors.length)],
       text: "",
     };
@@ -189,10 +291,46 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
     setSelectedBlockId(newBlock.id);
   }, []);
 
+  // Track current dragging block position for trash detection
+  const draggingPositionRef = useRef<Position | null>(null);
+
   const handleBlockPositionChange = useCallback((blockId: string, position: Position) => {
     setUserBlocks(prev => prev.map(block => 
       block.id === blockId ? { ...block, position } : block
     ));
+    
+    // Store current position for trash detection
+    draggingPositionRef.current = position;
+    
+    // Check if over trash zone (bottom-left corner) - relative to viewport
+    const trashZone = getTrashZoneHitArea();
+    const isNearTrash = position.x < trashZone.xThreshold && 
+                        position.y > window.innerHeight - trashZone.yThreshold;
+    setIsOverTrash(isNearTrash);
+  }, []);
+  
+  const handleBlockDragStart = useCallback(() => {
+    setIsDragging(true);
+    draggingPositionRef.current = null;
+  }, []);
+  
+  const handleBlockDragEnd = useCallback((blockId: string) => {
+    setIsDragging(false);
+    
+    // Check trash zone using the ref (avoids stale closure)
+    const pos = draggingPositionRef.current;
+    if (pos) {
+      const trashZone = getTrashZoneHitArea();
+      const isInTrash = pos.x < trashZone.xThreshold && 
+                        pos.y > window.innerHeight - trashZone.yThreshold;
+      if (isInTrash) {
+        setUserBlocks(prev => prev.filter(b => b.id !== blockId));
+        setSelectedBlockId(null);
+      }
+    }
+    
+    setIsOverTrash(false);
+    draggingPositionRef.current = null;
   }, []);
 
   const handleTextContentChange = useCallback((blockId: string, content: string) => {
@@ -273,6 +411,8 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
                 key={block.id}
                 position={block.position}
                 onPositionChange={(pos) => handleBlockPositionChange(block.id, pos)}
+                onDragStart={handleBlockDragStart}
+                onDragEnd={() => handleBlockDragEnd(block.id)}
                 content={block.content}
                 onContentChange={(content) => handleTextContentChange(block.id, content)}
                 width={block.width}
@@ -288,6 +428,8 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
                 key={block.id}
                 position={block.position}
                 onPositionChange={(pos) => handleBlockPositionChange(block.id, pos)}
+                onDragStart={handleBlockDragStart}
+                onDragEnd={() => handleBlockDragEnd(block.id)}
                 shape={block.shape}
                 width={block.width}
                 height={block.height}
@@ -307,6 +449,9 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
 
       <Toolbar onAddText={handleAddText} onAddShape={handleAddShape} />
       
+      {/* Trash zone - visible when dragging */}
+      {isDragging && <TrashZone isOver={isOverTrash} />}
+      
       {/* Header bar */}
       <div
         style={{
@@ -314,7 +459,7 @@ function MeetingContent({ data }: { data: MeetingResponse }) {
           top: 0,
           left: 0,
           right: 0,
-          height: 48,
+          height: "var(--header-height)",
           background: "var(--bg-elevated)",
           borderBottom: "1px solid var(--border-subtle)",
           display: "flex",

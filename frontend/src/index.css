@@ -65,6 +65,17 @@
   /* Transitions */
   --transition-fast: 150ms ease;
   --transition-base: 200ms ease;
+
+  /* Layout - relative to viewport */
+  --header-height: 3rem; /* 48px at default */
+  --toolbar-top: 4rem; /* header + gap */
+  --trash-zone-size: 3.5rem;
+  --trash-zone-margin: 1.5rem;
+  
+  /* Block defaults */
+  --block-default-width: 12.5rem; /* 200px */
+  --block-min-width: 6.25rem; /* 100px */
+  --shape-default-size: 6.25rem; /* 100px */
 }
 
 /* ============================================
