@@ -259,6 +259,7 @@ function MeetingContent({
   // Notes block state - initialize with viewport-relative position
   const [notesPosition, setNotesPosition] = useState<Position>(() => getNotesPosition(hasSidebar));
   const [notesContent, setNotesContent] = useState<string>(state.meetingSummary);
+  const [notesSize, setNotesSize] = useState({ width: 340, height: 300 });
   
   // User-created blocks
   const [userBlocks, setUserBlocks] = useState<UserBlock[]>([]);
@@ -430,6 +431,9 @@ function MeetingContent({
             content={notesContent}
             onContentChange={setNotesContent}
             workflowCount={state.workflows.length}
+            width={notesSize.width}
+            height={notesSize.height}
+            onSizeChange={(w, h) => setNotesSize({ width: w, height: h })}
             selected={selectedBlockId === "notes"}
             onSelect={() => setSelectedBlockId("notes")}
           />

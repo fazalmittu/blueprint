@@ -516,23 +516,33 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
     """
     system_prompt = """You are an AI assistant that processes meeting transcripts to extract insights.
     Your job is to:
-    1. Update the meeting summary with key points from the new chunk
+    1. Update the meeting summary with key points from the new chunk (as bullet points)
     2. Identify any workflows or processes mentioned and create/update Mermaid diagrams for them
 
     You will receive the current state and a new chunk of transcript.
     Return an updated state in the exact JSON format specified.
 
-    For workflows:
-    - Create a new workflow if a distinct process/workflow is described
-    - Update existing workflows if the chunk adds to them
+    MEETING SUMMARY RULES:
+    - Format the summary as bullet points (use "• " prefix for each point)
+    - Each bullet should be a concise, standalone insight
+    - Add new bullets for new information, don't repeat existing points
+    - If the chunk contains meta-commentary, critiques, or instructions about the output (not actual meeting content), DO NOT add it to the summary
+
+    WORKFLOW RULES:
+    - Be VERY conservative about creating new workflows - only create when absolutely necessary
+    - Prefer updating/expanding existing workflows over creating new ones
+    - If two workflows cover similar or overlapping processes, MERGE them into one
+    - Only create a new workflow if the chunk describes a genuinely distinct, separate process
     - Each workflow must have a unique id (UUID format), descriptive title, valid Mermaid diagram, and sources array
     - Use valid Mermaid diagram syntax (flowchart TD format)
     - Track which chunks contributed to each workflow in the sources array
+    - When merging workflows, combine their sources arrays and keep the most descriptive title
 
-    Important:
-    - Keep the meeting summary concise but comprehensive
-    - Only create workflows for actual processes/procedures described
-    - Each workflow should have a descriptive title and mermaid diagram"""
+    HANDLING INSTRUCTIONAL/CRITIQUE CONTENT:
+    - If the chunk contains instructions, critiques, or feedback about the diagrams/workflows themselves (not meeting content):
+      - DO NOT update the meeting summary
+      - DO apply the feedback to modify/improve the workflows accordingly
+      - This includes things like "make this more detailed", "combine these steps", etc."""
 
     # Prepare current state for prompt (exclude chunk metadata)
     state_for_prompt = {
@@ -548,7 +558,7 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
 
     Please analyze this chunk and return an updated state. The response must be valid JSON with this exact structure:
     {{
-        "meetingSummary": "updated summary incorporating new information",
+        "meetingSummary": "• First key point\\n• Second key point\\n• Third key point",
         "workflows": [
             {{
                 "id": "uuid-string",
@@ -558,6 +568,12 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
             }}
         ]
     }}
+
+    Remember:
+    - meetingSummary should be bullet points (• prefix), not paragraphs
+    - Only create new workflows when absolutely necessary, prefer updating existing ones
+    - Merge similar/overlapping workflows
+    - If this chunk is instructional/critique content, only modify workflows, not the summary
 
     Return ONLY the JSON object, no additional text."""
 
