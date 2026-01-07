@@ -1,5 +1,22 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Blueprint Logo" width="80">
+  <svg width="80" height="80" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#3b82f6"/>
+        <stop offset="100%" stop-color="#1d4ed8"/>
+      </linearGradient>
+    </defs>
+    <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+    <g fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="22" y="10" width="20" height="12" rx="2" fill="#fff" fill-opacity="0.2"/>
+      <line x1="32" y1="22" x2="32" y2="28"/>
+      <rect x="18" y="28" width="28" height="14" rx="3" fill="#fff" fill-opacity="0.2"/>
+      <line x1="24" y1="42" x2="18" y2="48"/>
+      <line x1="40" y1="42" x2="46" y2="48"/>
+      <circle cx="14" cy="52" r="5" fill="#fff" fill-opacity="0.3"/>
+      <circle cx="50" cy="52" r="5" fill="#fff" fill-opacity="0.3"/>
+    </g>
+  </svg>
 </p>
 
 <h1 align="center">Blueprint</h1>
