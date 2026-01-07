@@ -145,7 +145,7 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-strong);
-}
+  }
 
 /* ============================================
    Selection
