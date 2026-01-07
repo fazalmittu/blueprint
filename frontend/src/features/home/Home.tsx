@@ -77,7 +77,7 @@ export function Home() {
 
       <style>{`
         .home-container {
-          max-width: 800px;
+          max-width: min(50rem, 90vw);
           margin: 0 auto;
           padding: var(--space-xl);
         }
@@ -165,7 +165,7 @@ export function Home() {
           font-weight: 500;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          padding: 2px 8px;
+          padding: var(--space-xs) var(--space-sm);
           border-radius: 9999px;
         }
 

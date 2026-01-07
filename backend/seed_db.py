@@ -166,8 +166,8 @@ def create_fake_meetings():
         meeting_id = str(uuid.uuid4())
         current_state_id = str(uuid.uuid4())
         
-        # Create meeting
-        status = Status.finalized if i == 2 else Status.active  # Make one finalized
+        # Create meeting - all seeded meetings are finalized
+        status = Status.finalized
         meeting = Meeting(
             meetingId=meeting_id,
             status=status,

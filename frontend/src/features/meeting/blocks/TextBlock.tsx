@@ -4,6 +4,8 @@ import { DraggableBlock, type Position } from "./DraggableBlock";
 interface TextBlockProps {
   position: Position;
   onPositionChange: (position: Position) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
   content: string;
   onContentChange: (content: string) => void;
   width?: number;
@@ -15,11 +17,13 @@ interface TextBlockProps {
 
 /**
  * Simple editable text block.
- * Drag from anywhere, type inside.
+ * Has a small drag handle at the top, text area below.
  */
 export function TextBlock({
   position,
   onPositionChange,
+  onDragStart,
+  onDragEnd,
   content,
   onContentChange,
   width = 200,
@@ -81,44 +85,66 @@ export function TextBlock({
     <DraggableBlock
       position={position}
       onPositionChange={onPositionChange}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       width={width}
       selected={selected}
       onSelect={onSelect}
       style={{
         background: "var(--bg-elevated)",
-        border: "1px solid var(--border-subtle)",
+        border: selected ? "1px solid var(--accent)" : "1px solid var(--border-subtle)",
         borderRadius: "var(--radius-md)",
         overflow: "visible",
       }}
     >
-      {/* The entire block is the drag handle */}
-      <div data-drag-handle style={{ cursor: "grab" }}>
-        <div
-          ref={(el) => {
-            if (el && !contentInitialized.current) {
-              editorRef.current = el;
-              if (content) el.innerHTML = content;
-              contentInitialized.current = true;
-            }
-          }}
-          contentEditable
-          suppressContentEditableWarning
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          data-placeholder={placeholder}
-          style={{
-            padding: "var(--space-md)",
-            minHeight: "48px",
-            fontSize: "0.875rem",
-            lineHeight: 1.6,
-            color: "var(--text-primary)",
-            outline: "none",
-            cursor: "text",
-          }}
-        />
+      {/* Drag handle bar at top */}
+      <div
+        data-drag-handle
+        style={{
+          height: 12,
+          background: selected ? "var(--accent-subtle, #e0f2fe)" : "var(--bg-secondary)",
+          borderBottom: "1px solid var(--border-subtle)",
+          borderRadius: "var(--radius-md) var(--radius-md) 0 0",
+          cursor: "grab",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {/* Grip dots */}
+        <div style={{ display: "flex", gap: 3 }}>
+          <div style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--text-faint)" }} />
+          <div style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--text-faint)" }} />
+          <div style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--text-faint)" }} />
+        </div>
       </div>
+
+      {/* Editable content */}
+      <div
+        ref={(el) => {
+          if (el && !contentInitialized.current) {
+            editorRef.current = el;
+            if (content) el.innerHTML = content;
+            contentInitialized.current = true;
+          }
+        }}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={handleInput}
+        onKeyDown={handleKeyDown}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        data-placeholder={placeholder}
+        style={{
+          padding: "var(--space-sm) var(--space-md)",
+          minHeight: "40px",
+          fontSize: "0.875rem",
+          lineHeight: 1.6,
+          color: "var(--text-primary)",
+          outline: "none",
+          cursor: "text",
+        }}
+      />
 
       {/* Resize handle */}
       {selected && onWidthChange && (

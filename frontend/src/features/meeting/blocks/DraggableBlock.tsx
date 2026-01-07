@@ -9,6 +9,8 @@ export interface DraggableBlockProps {
   children: ReactNode;
   position: Position;
   onPositionChange: (position: Position) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
   width?: number | "auto";
   minWidth?: number;
   selected?: boolean;
@@ -26,6 +28,8 @@ export function DraggableBlock({
   children,
   position,
   onPositionChange,
+  onDragStart,
+  onDragEnd,
   width = "auto",
   minWidth = 100,
   selected = false,
@@ -49,6 +53,7 @@ export function DraggableBlock({
 
     e.preventDefault();
     setIsDragging(true);
+    onDragStart?.();
     dragOffset.current = {
       x: e.clientX - position.x,
       y: e.clientY - position.y,
@@ -63,6 +68,7 @@ export function DraggableBlock({
 
     const handleMouseUp = () => {
       setIsDragging(false);
+      onDragEnd?.();
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };

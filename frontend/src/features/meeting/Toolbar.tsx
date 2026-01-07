@@ -12,7 +12,7 @@ export function Toolbar({ onAddText, onAddShape }: ToolbarProps) {
       onClick={(e) => e.stopPropagation()}
       style={{
         position: "fixed",
-        top: "var(--space-lg)",
+        top: "var(--toolbar-top)",
         left: "50%",
         transform: "translateX(-50%)",
         display: "flex",
@@ -60,8 +60,8 @@ function ToolbarButton({
       onClick={onClick}
       title={title}
       style={{
-        width: "36px",
-        height: "36px",
+        width: "var(--space-2xl)",
+        height: "var(--space-2xl)",
         border: "none",
         background: "transparent",
         cursor: "pointer",
@@ -91,7 +91,7 @@ function ToolbarDivider() {
     <div
       style={{
         width: "1px",
-        height: "24px",
+        height: "var(--space-lg)",
         background: "var(--border-subtle)",
         alignSelf: "center",
         margin: "0 var(--space-xs)",
