@@ -198,7 +198,7 @@ def process_full_transcript(transcript: str, verbose: bool = True) -> dict:
         print(f"\n📝 Transcript chunked into {len(chunks)} chunks\n")
         print("=" * 60)
     
-    for i, chunk in enumerate(chunks):
+    for i, chunk in enumerate[str](chunks):
         if verbose:
             print(f"\n🔄 Processing chunk {i + 1}/{len(chunks)}...")
             print(f"   Chunk: \"{chunk[:80]}{'...' if len(chunk) > 80 else ''}\"")
