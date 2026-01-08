@@ -262,6 +262,21 @@ function MeetingContent({
           ← Back
         </button>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
+          {/* Meeting title */}
+          <span
+            style={{
+              fontWeight: 500,
+              fontSize: "0.9375rem",
+              color: "var(--text-primary)",
+              maxWidth: "300px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={meeting.title || `Meeting ${meeting.meetingId.slice(0, 8)}...`}
+          >
+            {meeting.title || `Meeting ${meeting.meetingId.slice(0, 8)}...`}
+          </span>
           {isProcessing && (
             <span style={{
               display: "flex",
@@ -283,7 +298,7 @@ function MeetingContent({
           <span
             style={{
               fontFamily: "var(--font-mono)",
-              fontSize: "0.75rem",
+              fontSize: "0.6875rem",
               color: "var(--text-muted)",
             }}
           >
@@ -467,9 +482,21 @@ export function Meeting() {
               eventSourceRef.current.close();
               eventSourceRef.current = null;
             }
-            // Reload to get finalized status
-            if (meetingId) {
-              getMeeting(meetingId).then(res => setData(res)).catch(console.error);
+            // Update the meeting with the generated title if provided
+            if (message.title) {
+              setData(prev => prev ? {
+                ...prev,
+                meeting: {
+                  ...prev.meeting,
+                  title: message.title,
+                  status: "finalized"
+                }
+              } : null);
+            } else {
+              // Reload to get finalized status and title
+              if (meetingId) {
+                getMeeting(meetingId).then(res => setData(res)).catch(console.error);
+              }
             }
             break;
           

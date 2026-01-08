@@ -5,6 +5,10 @@
     "meetingId": { "type": "string" },
     "status": { "enum": ["active", "finalized"] },
     "orgId": { "type": "string" },
+    "title": {
+      "type": "string",
+      "description": "LLM-generated title for the meeting based on transcript content"
+    },
     "transcript": { 
       "type": "string",
       "description": "The full transcript text uploaded by user"

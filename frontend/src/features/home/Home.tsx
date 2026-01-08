@@ -78,10 +78,9 @@ export function Home() {
                 onClick={() => navigate(`/meeting/${meeting.meetingId}`)}
               >
                 <div className="meeting-info">
-                  <div className="meeting-id">{meeting.meetingId.slice(0, 8)}...</div>
-                  {meeting.totalChunks && (
-                    <div className="meeting-chunks">{meeting.totalChunks} chunks</div>
-                  )}
+                  <div className="meeting-title">
+                    {meeting.title || `Meeting ${meeting.meetingId.slice(0, 8)}...`}
+                  </div>
                 </div>
                 <span className={`status-badge ${meeting.status}`}>
                   {meeting.status}
@@ -180,18 +179,17 @@ export function Home() {
         .meeting-info {
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          flex: 1;
+          min-width: 0;
         }
 
-        .meeting-id {
-          font-family: var(--font-mono);
-          font-size: 0.875rem;
+        .meeting-title {
+          font-size: 0.9375rem;
+          font-weight: 500;
           color: var(--text-primary);
-        }
-
-        .meeting-chunks {
-          font-size: 0.6875rem;
-          color: var(--text-muted);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .status-badge {

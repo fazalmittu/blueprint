@@ -17,6 +17,7 @@ export interface MeetingsResponse {
     meetingId: string;
     status: "active" | "finalized";
     orgId: string;
+    title?: string;
     transcript?: string;
     totalChunks?: number;
   }[];
@@ -49,6 +50,7 @@ export interface MeetingResponse {
     meetingId: string;
     status: "active" | "finalized";
     orgId: string;
+    title?: string;
     transcript?: string;
     totalChunks?: number;
   };
@@ -90,6 +92,7 @@ export interface SSEMessage {
   totalChunks?: number;
   version?: number;
   currentState?: MeetingResponse["currentState"];
+  title?: string;
 }
 
 /**
