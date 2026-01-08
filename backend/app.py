@@ -403,7 +403,7 @@ def register_routes(app):
             return jsonify({'error': 'Failed to update workflows'}), 500
         
         return jsonify({
-            'workflow': new_workflow.model_dump()
+            'workflow': new_workflow.model_dump(mode='json')
         }), 201
 
     @app.route('/meeting/<meeting_id>/workflow/<workflow_id>', methods=['PATCH'])
@@ -489,7 +489,7 @@ def register_routes(app):
             return jsonify({'error': 'Failed to update workflow'}), 500
         
         return jsonify({
-            'workflow': workflow.model_dump()
+            'workflow': workflow.model_dump(mode='json')
         }), 200
 
     @app.route('/meeting/<meeting_id>/workflow/<workflow_id>', methods=['DELETE'])
