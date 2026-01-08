@@ -27,6 +27,8 @@ interface WorkflowBlockProps {
   position: Position;
   onPositionChange: (position: Position) => void;
   width?: number;
+  height?: number;
+  onSizeChange?: (width: number, height: number) => void;
   selected?: boolean;
   onSelect?: () => void;
   isEditable?: boolean;
@@ -44,6 +46,8 @@ export function WorkflowBlock({
   position,
   onPositionChange,
   width = 480,
+  height = 360,
+  onSizeChange,
   selected = false,
   onSelect,
   isEditable = false,
@@ -52,6 +56,7 @@ export function WorkflowBlock({
 }: WorkflowBlockProps) {
   const [isMinimized, setIsMinimized] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
 
   // Convert workflow to React Flow format with layout
   const { nodes: displayNodes, edges: displayEdges } = useMemo(
@@ -88,6 +93,36 @@ export function WorkflowBlock({
       }
     },
     [workflow.id, onWorkflowDelete]
+  );
+
+  // Resize handling
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsResizing(true);
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startWidth = width;
+      const startHeight = height;
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const newWidth = Math.max(300, startWidth + (moveEvent.clientX - startX));
+        const newHeight = Math.max(200, startHeight + (moveEvent.clientY - startY));
+        onSizeChange?.(newWidth, newHeight);
+      };
+
+      const handleMouseUp = () => {
+        setIsResizing(false);
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [width, height, onSizeChange]
   );
 
   const HeaderActions = (
@@ -221,6 +256,14 @@ export function WorkflowBlock({
       {/* Portal overlay for editor */}
       {editorOverlay}
 
+      {/* CSS to hide handles in read-only mode */}
+      <style>{`
+        .workflow-readonly .react-flow__handle {
+          opacity: 0;
+          pointer-events: none;
+        }
+      `}</style>
+
       {/* Normal workflow block */}
       <DraggableBlock
         position={position}
@@ -233,6 +276,9 @@ export function WorkflowBlock({
           border: "1px solid var(--border-subtle)",
           borderRadius: "var(--radius-lg)",
           overflow: "hidden",
+          height: isMinimized ? "auto" : height,
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         <BlockHeader title={workflow.title} actions={HeaderActions} />
@@ -241,9 +287,11 @@ export function WorkflowBlock({
           <>
             {/* Diagram - rendered with React Flow in read-only mode */}
             <div
+              className="workflow-readonly"
               style={{
                 background: "var(--bg-primary)",
-                height: "280px",
+                flex: 1,
+                minHeight: 0,
               }}
             >
               <ReactFlowProvider>
@@ -254,16 +302,19 @@ export function WorkflowBlock({
                   nodesDraggable={false}
                   nodesConnectable={false}
                   elementsSelectable={false}
-                  panOnDrag={false}
-                  zoomOnScroll={false}
-                  zoomOnPinch={false}
-                  zoomOnDoubleClick={false}
-                  preventScrolling={false}
+                  panOnDrag={true}
+                  panOnScroll={true}
+                  zoomOnScroll={true}
+                  zoomOnPinch={true}
+                  zoomOnDoubleClick={true}
+                  preventScrolling={true}
+                  minZoom={0.2}
+                  maxZoom={2}
                   fitView
                   fitViewOptions={{
-                    padding: 0.2,
-                    maxZoom: 1.2,
-                    minZoom: 0.5,
+                    padding: 0.3,
+                    maxZoom: 1,
+                    minZoom: 0.3,
                   }}
                   proOptions={{ hideAttribution: true }}
                 >
@@ -281,6 +332,7 @@ export function WorkflowBlock({
                 alignItems: "center",
                 justifyContent: "space-between",
                 background: "var(--bg-secondary)",
+                flexShrink: 0,
               }}
             >
               <span
@@ -330,6 +382,41 @@ export function WorkflowBlock({
               </div>
             </div>
           </>
+        )}
+
+        {/* Resize handle */}
+        {!isMinimized && onSizeChange && (
+          <div
+            onMouseDown={handleResizeStart}
+            style={{
+              position: "absolute",
+              right: 0,
+              bottom: 0,
+              width: 16,
+              height: 16,
+              cursor: "nwse-resize",
+              background: isResizing ? "var(--accent)" : "transparent",
+              borderRadius: "0 0 var(--radius-lg) 0",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg
+              width="8"
+              height="8"
+              viewBox="0 0 8 8"
+              fill="none"
+              style={{ opacity: selected ? 0.6 : 0.3 }}
+            >
+              <path
+                d="M7 1L1 7M7 4L4 7M7 7L7 7"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
         )}
       </DraggableBlock>
     </>

@@ -263,6 +263,9 @@ function MeetingContent({
   // Workflow positions (keyed by workflow ID)
   const [workflowPositions, setWorkflowPositions] = useState<Record<string, Position>>({});
   
+  // Workflow sizes (keyed by workflow ID)
+  const [workflowSizes, setWorkflowSizes] = useState<Record<string, { width: number; height: number }>>({});
+  
   // Notes block state - initialize with viewport-relative position
   const [notesPosition, setNotesPosition] = useState<Position>(() => getNotesPosition(hasSidebar));
   const [notesContent, setNotesContent] = useState<string>(state.meetingSummary);
@@ -313,6 +316,14 @@ function MeetingContent({
   const handleWorkflowPositionChange = useCallback((workflowId: string, position: Position) => {
     setWorkflowPositions(prev => ({ ...prev, [workflowId]: position }));
   }, []);
+
+  const handleWorkflowSizeChange = useCallback((workflowId: string, width: number, height: number) => {
+    setWorkflowSizes(prev => ({ ...prev, [workflowId]: { width, height } }));
+  }, []);
+
+  const getWorkflowSize = useCallback((workflowId: string) => {
+    return workflowSizes[workflowId] || { width: 480, height: 360 };
+  }, [workflowSizes]);
 
   const handleAddText = useCallback(() => {
     const availableWidth = window.innerWidth - (hasSidebar ? 280 : 0);
@@ -498,19 +509,25 @@ function MeetingContent({
           />
 
           {/* Workflow blocks from server */}
-          {state.workflows.map((workflow, index) => (
-            <WorkflowBlock
-              key={workflow.id}
-              workflow={workflow}
-              position={getWorkflowPos(workflow.id, index)}
-              onPositionChange={(pos) => handleWorkflowPositionChange(workflow.id, pos)}
-              selected={selectedBlockId === workflow.id}
-              onSelect={() => setSelectedBlockId(workflow.id)}
-              isEditable={isEditable}
-              onWorkflowUpdate={handleWorkflowUpdate}
-              onWorkflowDelete={handleWorkflowDelete}
-            />
-          ))}
+          {state.workflows.map((workflow, index) => {
+            const size = getWorkflowSize(workflow.id);
+            return (
+              <WorkflowBlock
+                key={workflow.id}
+                workflow={workflow}
+                position={getWorkflowPos(workflow.id, index)}
+                onPositionChange={(pos) => handleWorkflowPositionChange(workflow.id, pos)}
+                width={size.width}
+                height={size.height}
+                onSizeChange={(w, h) => handleWorkflowSizeChange(workflow.id, w, h)}
+                selected={selectedBlockId === workflow.id}
+                onSelect={() => setSelectedBlockId(workflow.id)}
+                isEditable={isEditable}
+                onWorkflowUpdate={handleWorkflowUpdate}
+                onWorkflowDelete={handleWorkflowDelete}
+              />
+            );
+          })}
 
           {/* User-created blocks */}
           {userBlocks.map((block) => {
