@@ -315,5 +315,57 @@ def get_state_version_count(meeting_id: str) -> int:
         return cursor.fetchone()[0]
 
 
+def update_latest_state_workflows(meeting_id: str, workflows: list[Workflow]) -> Optional[CurrentStateVersion]:
+    """
+    Update workflows in the latest state version for a meeting.
+    
+    Args:
+        meeting_id: The meeting ID
+        workflows: The new list of workflows
+    
+    Returns:
+        The updated CurrentStateVersion, or None if no state exists
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Get the latest version
+        cursor.execute(
+            '''SELECT version, current_state_id, data_json 
+               FROM state_versions 
+               WHERE meeting_id = ? 
+               ORDER BY version DESC 
+               LIMIT 1''',
+            (meeting_id,)
+        )
+        row = cursor.fetchone()
+        
+        if row is None:
+            return None
+        
+        # Deserialize current data
+        current_data = _deserialize_state_data(row['data_json'])
+        
+        # Update workflows
+        current_data.workflows = workflows
+        
+        # Serialize back
+        new_data_json = _serialize_state_data(current_data)
+        
+        # Update in database
+        cursor.execute(
+            '''UPDATE state_versions 
+               SET data_json = ? 
+               WHERE meeting_id = ? AND version = ?''',
+            (new_data_json, meeting_id, row['version'])
+        )
+        
+        return CurrentStateVersion(
+            version=row['version'],
+            currentStateId=row['current_state_id'],
+            data=current_data
+        )
+
+
 # Initialize the database on module import
 init_db()

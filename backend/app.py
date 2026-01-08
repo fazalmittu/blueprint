@@ -319,6 +319,175 @@ def register_routes(app):
             }
         )
 
+    # ==================== WORKFLOW ENDPOINTS ====================
+
+    @app.route('/meeting/<meeting_id>/workflow', methods=['POST'])
+    def create_workflow(meeting_id: str):
+        """
+        Create a new workflow for a finalized meeting.
+        
+        Request Body:
+            title (str): The workflow title
+            mermaidDiagram (str): The mermaid diagram code
+        
+        Returns:
+            The created workflow
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        if meeting.status != Status.finalized:
+            return jsonify({'error': 'Workflows can only be created for finalized meetings'}), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        title = data.get('title', '').strip()
+        mermaid_diagram = data.get('mermaidDiagram', '').strip()
+        
+        if not title:
+            return jsonify({'error': 'title is required'}), 400
+        
+        if not mermaid_diagram:
+            return jsonify({'error': 'mermaidDiagram is required'}), 400
+        
+        # Validate mermaid syntax
+        is_valid, error_msg = validate_mermaid_syntax(mermaid_diagram)
+        if not is_valid:
+            return jsonify({'error': f'Invalid mermaid syntax: {error_msg}'}), 400
+        
+        # Get current workflows
+        latest_state = db.get_latest_state_version(meeting_id)
+        if not latest_state:
+            return jsonify({'error': 'No state found for meeting'}), 404
+        
+        # Create new workflow
+        new_workflow = Workflow(
+            id=str(uuid.uuid4()),
+            title=title,
+            mermaidDiagram=mermaid_diagram,
+            sources=['user_created']
+        )
+        
+        # Add to workflows list
+        workflows = list(latest_state.data.workflows) if latest_state.data.workflows else []
+        workflows.append(new_workflow)
+        
+        # Update in database
+        updated_state = db.update_latest_state_workflows(meeting_id, workflows)
+        if not updated_state:
+            return jsonify({'error': 'Failed to update workflows'}), 500
+        
+        return jsonify({
+            'workflow': new_workflow.model_dump()
+        }), 201
+
+    @app.route('/meeting/<meeting_id>/workflow/<workflow_id>', methods=['PATCH'])
+    def update_workflow(meeting_id: str, workflow_id: str):
+        """
+        Update a workflow for a finalized meeting.
+        
+        Request Body:
+            title (str, optional): New title
+            mermaidDiagram (str, optional): New mermaid diagram code
+        
+        Returns:
+            The updated workflow
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        if meeting.status != Status.finalized:
+            return jsonify({'error': 'Workflows can only be edited for finalized meetings'}), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        # Get current workflows
+        latest_state = db.get_latest_state_version(meeting_id)
+        if not latest_state:
+            return jsonify({'error': 'No state found for meeting'}), 404
+        
+        # Find the workflow to update
+        workflows = list(latest_state.data.workflows) if latest_state.data.workflows else []
+        workflow_index = next((i for i, w in enumerate(workflows) if w.id == workflow_id), None)
+        
+        if workflow_index is None:
+            return jsonify({'error': 'Workflow not found'}), 404
+        
+        workflow = workflows[workflow_index]
+        
+        # Update fields if provided
+        if 'title' in data:
+            new_title = data['title'].strip()
+            if not new_title:
+                return jsonify({'error': 'title cannot be empty'}), 400
+            workflow.title = new_title
+        
+        if 'mermaidDiagram' in data:
+            new_diagram = data['mermaidDiagram'].strip()
+            if not new_diagram:
+                return jsonify({'error': 'mermaidDiagram cannot be empty'}), 400
+            
+            # Validate mermaid syntax
+            is_valid, error_msg = validate_mermaid_syntax(new_diagram)
+            if not is_valid:
+                return jsonify({'error': f'Invalid mermaid syntax: {error_msg}'}), 400
+            
+            workflow.mermaidDiagram = new_diagram
+        
+        # Update in database
+        workflows[workflow_index] = workflow
+        updated_state = db.update_latest_state_workflows(meeting_id, workflows)
+        if not updated_state:
+            return jsonify({'error': 'Failed to update workflow'}), 500
+        
+        return jsonify({
+            'workflow': workflow.model_dump()
+        }), 200
+
+    @app.route('/meeting/<meeting_id>/workflow/<workflow_id>', methods=['DELETE'])
+    def delete_workflow(meeting_id: str, workflow_id: str):
+        """
+        Delete a workflow from a finalized meeting.
+        
+        Returns:
+            Success status
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        if meeting.status != Status.finalized:
+            return jsonify({'error': 'Workflows can only be deleted from finalized meetings'}), 400
+        
+        # Get current workflows
+        latest_state = db.get_latest_state_version(meeting_id)
+        if not latest_state:
+            return jsonify({'error': 'No state found for meeting'}), 404
+        
+        # Find and remove the workflow
+        workflows = list(latest_state.data.workflows) if latest_state.data.workflows else []
+        original_count = len(workflows)
+        workflows = [w for w in workflows if w.id != workflow_id]
+        
+        if len(workflows) == original_count:
+            return jsonify({'error': 'Workflow not found'}), 404
+        
+        # Update in database
+        updated_state = db.update_latest_state_workflows(meeting_id, workflows)
+        if not updated_state:
+            return jsonify({'error': 'Failed to delete workflow'}), 500
+        
+        return jsonify({
+            'success': True,
+            'deletedWorkflowId': workflow_id
+        }), 200
+
     # ==================== PROCESS ENDPOINT ====================
 
     @app.route('/process', methods=['POST'])
@@ -447,6 +616,67 @@ def process_transcript_chunks(meeting_id: str, chunks: list[str]):
 
 
 # ==================== HELPER FUNCTIONS ====================
+
+def validate_mermaid_syntax(diagram: str) -> tuple[bool, str | None]:
+    """
+    Validate basic mermaid flowchart syntax.
+    
+    Args:
+        diagram: The mermaid diagram string
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+        error_message is None if valid
+    """
+    if not diagram or not diagram.strip():
+        return False, "Diagram cannot be empty"
+    
+    lines = diagram.strip().split('\n')
+    first_line = lines[0].strip().lower()
+    
+    # Must start with a valid diagram type
+    valid_starts = ['flowchart td', 'flowchart tb', 'flowchart lr', 'flowchart rl', 
+                    'flowchart bt', 'graph td', 'graph tb', 'graph lr', 'graph rl']
+    if not any(first_line.startswith(start) for start in valid_starts):
+        return False, "Diagram must start with 'flowchart TD' or similar direction (TD, TB, LR, RL, BT)"
+    
+    # Check for common syntax errors
+    for i, line in enumerate(lines[1:], start=2):
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Skip subgraph and end keywords
+        if line.lower().startswith('subgraph') or line.lower() == 'end':
+            continue
+        
+        # Skip comments
+        if line.startswith('%%'):
+            continue
+        
+        # Check for markdown code fence (common mistake)
+        if line.startswith('```'):
+            return False, f"Line {i}: Remove markdown code fences (```). Just use raw mermaid syntax"
+        
+        # Check for invalid arrow syntax
+        if '->' in line and '-->' not in line and '-.>' not in line:
+            if '->>' not in line and '-.->' not in line:
+                return False, f"Line {i}: Use '-->' for arrows, not '->'"
+        
+        # Check for node definitions without IDs (common mistake)
+        # e.g., "[Start]" instead of "A[Start]"
+        if re.match(r'^\s*\[[^\]]+\]\s*-->', line):
+            return False, f"Line {i}: Nodes need IDs before brackets. Use 'A[Label]' not '[Label]'"
+        
+        # Check for spaces in node IDs (before brackets)
+        node_match = re.match(r'^\s*([a-zA-Z0-9_\s]+)\[', line)
+        if node_match:
+            node_id = node_match.group(1).strip()
+            if ' ' in node_id:
+                return False, f"Line {i}: Node ID '{node_id}' cannot contain spaces. Use underscores instead"
+    
+    return True, None
+
 
 def get_initial_state() -> CurrentStateData:
     """

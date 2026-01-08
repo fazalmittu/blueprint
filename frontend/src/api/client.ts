@@ -168,3 +168,96 @@ export function subscribeMeetingUpdates(
   
   return eventSource;
 }
+
+// ==================== WORKFLOW ENDPOINTS ====================
+
+export interface Workflow {
+  id: string;
+  title: string;
+  mermaidDiagram: string;
+  sources: string[];
+}
+
+export interface WorkflowResponse {
+  workflow: Workflow;
+}
+
+export interface DeleteWorkflowResponse {
+  success: boolean;
+  deletedWorkflowId: string;
+}
+
+export interface CreateWorkflowRequest {
+  title: string;
+  mermaidDiagram: string;
+}
+
+export interface UpdateWorkflowRequest {
+  title?: string;
+  mermaidDiagram?: string;
+}
+
+/**
+ * Create a new workflow for a finalized meeting.
+ */
+export async function createWorkflow(
+  meetingId: string,
+  data: CreateWorkflowRequest
+): Promise<WorkflowResponse> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/workflow`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Failed to create workflow" }));
+    throw new Error(error.error || "Failed to create workflow");
+  }
+  return res.json();
+}
+
+/**
+ * Update a workflow for a finalized meeting.
+ */
+export async function updateWorkflow(
+  meetingId: string,
+  workflowId: string,
+  data: UpdateWorkflowRequest
+): Promise<WorkflowResponse> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/workflow/${encodeURIComponent(workflowId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Failed to update workflow" }));
+    throw new Error(error.error || "Failed to update workflow");
+  }
+  return res.json();
+}
+
+/**
+ * Delete a workflow from a finalized meeting.
+ */
+export async function deleteWorkflow(
+  meetingId: string,
+  workflowId: string
+): Promise<DeleteWorkflowResponse> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/workflow/${encodeURIComponent(workflowId)}`,
+    {
+      method: "DELETE",
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Failed to delete workflow" }));
+    throw new Error(error.error || "Failed to delete workflow");
+  }
+  return res.json();
+}
