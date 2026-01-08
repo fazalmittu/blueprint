@@ -27,8 +27,33 @@ export function InfiniteCanvas({
   const [isPanning, setIsPanning] = useState(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
 
+  // Check if an element or its ancestors is a scrollable container
+  const isInsideScrollableElement = useCallback((target: HTMLElement): boolean => {
+    let el: HTMLElement | null = target;
+    
+    while (el && el !== containerRef.current) {
+      const style = window.getComputedStyle(el);
+      const overflowY = style.overflowY;
+      const isScrollable = overflowY === "auto" || overflowY === "scroll";
+      
+      // If this element is scrollable and has content that exceeds its height, block zoom
+      if (isScrollable && el.scrollHeight > el.clientHeight) {
+        return true;
+      }
+      
+      el = el.parentElement;
+    }
+    
+    return false;
+  }, []);
+
   // Handle zoom with scroll wheel
   const handleWheel = useCallback((e: WheelEvent) => {
+    // If mouse is over a scrollable element, don't zoom - let it scroll
+    if (isInsideScrollableElement(e.target as HTMLElement)) {
+      return;
+    }
+    
     e.preventDefault();
     
     const delta = -e.deltaY * 0.001;
@@ -46,7 +71,7 @@ export function InfiniteCanvas({
       
       setTransform({ x: newX, y: newY, scale: newScale });
     }
-  }, [transform, minZoom, maxZoom]);
+  }, [transform, minZoom, maxZoom, isInsideScrollableElement]);
 
   // Handle pan start
   const handleMouseDown = useCallback((e: MouseEvent) => {
