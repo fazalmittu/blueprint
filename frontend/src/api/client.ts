@@ -273,3 +273,36 @@ export async function deleteWorkflow(
   }
   return res.json();
 }
+
+// ==================== MEETING SUMMARY ENDPOINT ====================
+
+export interface UpdateSummaryRequest {
+  meetingSummary: string;
+}
+
+export interface UpdateSummaryResponse {
+  success: boolean;
+  meetingSummary: string;
+}
+
+/**
+ * Update the meeting summary for a finalized meeting.
+ */
+export async function updateMeetingSummary(
+  meetingId: string,
+  meetingSummary: string
+): Promise<UpdateSummaryResponse> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/summary`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ meetingSummary }),
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Failed to update summary" }));
+    throw new Error(error.error || "Failed to update summary");
+  }
+  return res.json();
+}

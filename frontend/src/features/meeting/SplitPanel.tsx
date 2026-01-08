@@ -76,6 +76,11 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
   const handleTabClick = useCallback((tabId: string) => {
     if (layout === "single") {
       setActiveTab(tabId);
+    } else {
+      // In split mode, clicking a tab closes split and shows that tab fullscreen
+      setLayout("single");
+      setSplitTabs(null);
+      setActiveTab(tabId);
     }
   }, [layout]);
 
