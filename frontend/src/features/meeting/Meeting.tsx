@@ -11,232 +11,85 @@ import {
   type SSEMessage,
 } from "@/api/client";
 import type { Node, Edge } from "@xyflow/react";
-import { InfiniteCanvas } from "./InfiniteCanvas";
-import { Toolbar } from "./Toolbar";
+import { SplitPanel } from "./SplitPanel";
+import { MeetingNotes } from "./MeetingNotes";
+import { CanvasView } from "./CanvasView";
 import { TranscriptSidebar } from "./TranscriptSidebar";
-import { 
-  WorkflowBlock, 
-  NotesBlock, 
-  TextBlock, 
-  ShapeBlock,
-  type Position,
-  type ShapeType,
-  type ShapeColor,
-} from "./blocks";
-
-// Block state types
-interface TextBlockState {
-  type: "text";
-  id: string;
-  position: Position;
-  content: string;
-  width: number;
-}
-
-interface ShapeBlockState {
-  type: "shape";
-  id: string;
-  position: Position;
-  shape: ShapeType;
-  width: number;
-  height: number;
-  color: ShapeColor;
-  text: string;
-}
-
-type UserBlock = TextBlockState | ShapeBlockState;
 
 /**
- * Calculate non-overlapping positions for workflow cards.
- * Uses viewport-relative values, accounting for sidebar.
- */
-function getWorkflowPosition(index: number, hasSidebar: boolean): Position {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const sidebarWidth = hasSidebar ? 280 : 0;
-  
-  // Available width after sidebar
-  const availableWidth = vw - sidebarWidth;
-  
-  // Card takes ~30% of available width, gap is 3%
-  const CARD_WIDTH = availableWidth * 0.3;
-  const GAP_X = availableWidth * 0.03;
-  const START_X = sidebarWidth + availableWidth * 0.02; // Start after sidebar
-  const START_Y = vh * 0.12; // Start 12% from top (below header)
-  const ROW_HEIGHT = vh * 0.55; // Each row takes 55% of viewport height
-  
-  const col = index % 2;
-  const row = Math.floor(index / 2);
-  
-  return {
-    x: START_X + col * (CARD_WIDTH + GAP_X),
-    y: START_Y + row * ROW_HEIGHT,
-  };
-}
-
-/**
- * Get initial position for notes block - relative to viewport.
- */
-function getNotesPosition(hasSidebar: boolean): Position {
-  const sidebarWidth = hasSidebar ? 280 : 0;
-  return {
-    x: sidebarWidth + window.innerWidth * 0.02,
-    y: window.innerHeight * 0.12,
-  };
-}
-
-/**
- * Get initial position for new blocks - center of visible area.
- */
-function getNewBlockPosition(hasSidebar: boolean): Position {
-  const sidebarWidth = hasSidebar ? 280 : 0;
-  const availableWidth = window.innerWidth - sidebarWidth;
-  return {
-    x: sidebarWidth + availableWidth * 0.4,
-    y: window.innerHeight * 0.3,
-  };
-}
-
-/**
- * Loading state.
+ * Loading state component.
  */
 function LoadingState() {
   return (
     <div
       style={{
+        height: "100vh",
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        height: "100%",
-        gap: "var(--space-lg)",
-        color: "var(--text-muted)",
+        background: "var(--bg-primary)",
       }}
     >
-      <div
-        style={{
-          width: "48px",
-          height: "48px",
-          border: "2px solid var(--border-subtle)",
-          borderTopColor: "var(--accent)",
-          borderRadius: "50%",
-          animation: "spin 1s linear infinite",
-        }}
-      />
-      <p
-        style={{
-          margin: 0,
-          fontSize: "0.875rem",
-          fontFamily: "var(--font-mono)",
-        }}
-      >
-        Loading meeting...
-      </p>
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      <div style={{ textAlign: "center" }}>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            border: "3px solid var(--border-subtle)",
+            borderTopColor: "var(--accent)",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite",
+            margin: "0 auto var(--space-md)",
+          }}
+        />
+        <p style={{ color: "var(--text-muted)", margin: 0 }}>Loading meeting...</p>
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
     </div>
   );
 }
 
 /**
- * Error state.
+ * Error state component.
  */
 function ErrorState({ message, onBack }: { message: string; onBack: () => void }) {
   return (
     <div
       style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100%",
-        gap: "var(--space-md)",
-      }}
-    >
-      <p style={{ color: "var(--error)", margin: 0 }}>{message}</p>
-      <button
-        onClick={onBack}
-        style={{
-          padding: "var(--space-sm) var(--space-md)",
-          background: "var(--bg-secondary)",
-          border: "1px solid var(--border-default)",
-          borderRadius: "var(--radius-md)",
-          cursor: "pointer",
-          fontSize: "0.875rem",
-        }}
-      >
-        Back to Home
-      </button>
-    </div>
-  );
-}
-
-// Trash zone - check if mouse is near the trash icon (bottom-left corner)
-// Uses screen coordinates, not canvas coordinates
-const isMouseInTrashZone = (mouseX: number, mouseY: number, hasSidebar: boolean) => {
-  const margin = 24; // Same as --trash-zone-margin (1.5rem)
-  const size = 56; // Same as --trash-zone-size (3.5rem)
-  const hitPadding = 30; // Extra padding around the trash icon for easier targeting
-  const sidebarWidth = hasSidebar ? 280 : 0;
-  
-  const trashCenterX = sidebarWidth + margin + size / 2;
-  const trashCenterY = window.innerHeight - margin - size / 2;
-  
-  const distance = Math.sqrt(
-    Math.pow(mouseX - trashCenterX, 2) + 
-    Math.pow(mouseY - trashCenterY, 2)
-  );
-  
-  return distance < (size / 2 + hitPadding);
-};
-
-/**
- * Trash zone component - appears when dragging.
- */
-function TrashZone({ isOver, hasSidebar }: { isOver: boolean; hasSidebar: boolean }) {
-  const sidebarWidth = hasSidebar ? 280 : 0;
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: "var(--trash-zone-margin)",
-        left: `calc(${sidebarWidth}px + var(--trash-zone-margin))`,
-        width: "var(--trash-zone-size)",
-        height: "var(--trash-zone-size)",
-        borderRadius: "50%",
-        background: isOver ? "#fee2e2" : "var(--bg-elevated)",
-        border: isOver ? "2px solid var(--error)" : "2px dashed var(--border-default)",
+        height: "100vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        transition: "all var(--transition-fast)",
-        transform: isOver ? "scale(1.1)" : "scale(1)",
-        zIndex: 1000,
-        pointerEvents: "none",
+        background: "var(--bg-primary)",
       }}
     >
-      <svg
-        width="1.5rem"
-        height="1.5rem"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke={isOver ? "var(--error)" : "var(--text-muted)"}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <polyline points="3 6 5 6 21 6" />
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-      </svg>
+      <div style={{ textAlign: "center" }}>
+        <h2 style={{ color: "var(--error)", marginBottom: "var(--space-md)" }}>Error</h2>
+        <p style={{ color: "var(--text-secondary)", marginBottom: "var(--space-lg)" }}>{message}</p>
+        <button
+          onClick={onBack}
+          style={{
+            padding: "var(--space-sm) var(--space-lg)",
+            background: "var(--accent)",
+            color: "white",
+            border: "none",
+            borderRadius: "var(--radius-md)",
+            cursor: "pointer",
+          }}
+        >
+          Go Back
+        </button>
+      </div>
     </div>
   );
 }
 
 /**
- * Main meeting canvas content.
+ * Main meeting content with tab system.
  */
 function MeetingContent({ 
   data, 
@@ -259,170 +112,14 @@ function MeetingContent({
   const state = data.currentState.data;
   const meeting = data.meeting;
   const hasSidebar = meeting.totalChunks !== undefined && meeting.totalChunks > 0;
-  
-  // Workflow positions (keyed by workflow ID)
-  const [workflowPositions, setWorkflowPositions] = useState<Record<string, Position>>({});
-  
-  // Notes block state - initialize with viewport-relative position
-  const [notesPosition, setNotesPosition] = useState<Position>(() => getNotesPosition(hasSidebar));
-  const [notesContent, setNotesContent] = useState<string>(state.meetingSummary);
-  const [notesSize, setNotesSize] = useState({ width: 340, height: 300 });
-  
-  // User-created blocks
-  const [userBlocks, setUserBlocks] = useState<UserBlock[]>([]);
-  
-  // Selection state
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-  
-  // Drag state for trash zone
-  const [isDragging, setIsDragging] = useState(false);
-  const [isOverTrash, setIsOverTrash] = useState(false);
-
-  // Update notes content when state changes (from SSE updates)
-  useEffect(() => {
-    setNotesContent(state.meetingSummary);
-  }, [state.meetingSummary]);
-
-  // Keyboard delete handler
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Only delete if a user block is selected (not notes or workflows)
-      if ((e.key === "Backspace" || e.key === "Delete") && selectedBlockId) {
-        // Don't delete if user is typing in an editable element
-        const activeEl = document.activeElement;
-        if (activeEl && (activeEl as HTMLElement).isContentEditable) {
-          return;
-        }
-        // Check if it's a user block (starts with "text-" or "shape-")
-        if (selectedBlockId.startsWith("text-") || selectedBlockId.startsWith("shape-")) {
-          e.preventDefault();
-          setUserBlocks(prev => prev.filter(b => b.id !== selectedBlockId));
-          setSelectedBlockId(null);
-        }
-      }
-    };
-    
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedBlockId]);
-
-  const getWorkflowPos = useCallback((workflowId: string, index: number): Position => {
-    return workflowPositions[workflowId] || getWorkflowPosition(index, hasSidebar);
-  }, [workflowPositions, hasSidebar]);
-
-  const handleWorkflowPositionChange = useCallback((workflowId: string, position: Position) => {
-    setWorkflowPositions(prev => ({ ...prev, [workflowId]: position }));
-  }, []);
-
-  const handleAddText = useCallback(() => {
-    const availableWidth = window.innerWidth - (hasSidebar ? 280 : 0);
-    const newBlock: TextBlockState = {
-      type: "text",
-      id: `text-${Date.now()}`,
-      position: getNewBlockPosition(hasSidebar),
-      content: "",
-      width: Math.max(availableWidth * 0.12, 150), // 12% of viewport, min 150px
-    };
-    setUserBlocks(prev => [...prev, newBlock]);
-    setSelectedBlockId(newBlock.id);
-  }, [hasSidebar]);
-
-  const handleAddShape = useCallback((shape: ShapeType) => {
-    const availableWidth = window.innerWidth - (hasSidebar ? 280 : 0);
-    const colors: ShapeColor[] = ["blue", "green", "amber", "rose", "purple"];
-    const isSquare = shape === "circle" || shape === "diamond";
-    const baseSize = Math.max(availableWidth * 0.06, 80); // 6% of viewport, min 80px
-    const newBlock: ShapeBlockState = {
-      type: "shape",
-      id: `shape-${Date.now()}`,
-      position: getNewBlockPosition(hasSidebar),
-      shape,
-      width: isSquare ? baseSize : baseSize * 1.4,
-      height: baseSize,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      text: "",
-    };
-    setUserBlocks(prev => [...prev, newBlock]);
-    setSelectedBlockId(newBlock.id);
-  }, [hasSidebar]);
-
-  const handleBlockPositionChange = useCallback((blockId: string, position: Position, mouseX: number, mouseY: number) => {
-    setUserBlocks(prev => prev.map(block => 
-      block.id === blockId ? { ...block, position } : block
-    ));
-    
-    // Check if mouse is over trash zone (uses screen coordinates)
-    setIsOverTrash(isMouseInTrashZone(mouseX, mouseY, hasSidebar));
-  }, [hasSidebar]);
-  
-  const handleBlockDragStart = useCallback(() => {
-    setIsDragging(true);
-  }, []);
-  
-  const handleBlockDragEnd = useCallback((blockId: string, mouseX: number, mouseY: number) => {
-    setIsDragging(false);
-    
-    // Check if dropped in trash zone
-    if (isMouseInTrashZone(mouseX, mouseY, hasSidebar)) {
-      setUserBlocks(prev => prev.filter(b => b.id !== blockId));
-      setSelectedBlockId(null);
-    }
-    
-    setIsOverTrash(false);
-  }, [hasSidebar]);
-
-  const handleTextContentChange = useCallback((blockId: string, content: string) => {
-    setUserBlocks(prev => prev.map(block => 
-      block.id === blockId && block.type === "text" 
-        ? { ...block, content } 
-        : block
-    ));
-  }, []);
-
-  const handleTextWidthChange = useCallback((blockId: string, width: number) => {
-    setUserBlocks(prev => prev.map(block => 
-      block.id === blockId && block.type === "text" 
-        ? { ...block, width } 
-        : block
-    ));
-  }, []);
-
-  const handleShapeSizeChange = useCallback((blockId: string, width: number, height: number) => {
-    setUserBlocks(prev => prev.map(block => 
-      block.id === blockId && block.type === "shape" 
-        ? { ...block, width, height } 
-        : block
-    ));
-  }, []);
-
-  const handleShapeColorChange = useCallback((blockId: string, color: ShapeColor) => {
-    setUserBlocks(prev => prev.map(block => 
-      block.id === blockId && block.type === "shape" 
-        ? { ...block, color } 
-        : block
-    ));
-  }, []);
-
-  const handleShapeTextChange = useCallback((blockId: string, text: string) => {
-    setUserBlocks(prev => prev.map(block => 
-      block.id === blockId && block.type === "shape" 
-        ? { ...block, text } 
-        : block
-    ));
-  }, []);
-
-  const handleCanvasClick = useCallback(() => {
-    setSelectedBlockId(null);
-  }, []);
 
   // Check if meeting is editable (finalized and not processing)
   const isEditable = meeting.status === "finalized" && !isProcessing;
 
-  // Handle workflow update from editor
+  // Handle workflow update from canvas
   const handleWorkflowUpdate = useCallback(
     async (workflowId: string, nodes: Node[], edges: Edge[]) => {
       try {
-        // Convert React Flow nodes/edges to our workflow format
         const workflowNodes = nodes.map((node) => ({
           id: node.id,
           type: (node.type || "process") as "process" | "decision" | "terminal",
@@ -442,7 +139,6 @@ function MeetingContent({
           edges: workflowEdges,
         });
 
-        // Notify parent to update state
         onWorkflowUpdated?.(workflowId, workflowNodes, workflowEdges);
       } catch (error) {
         console.error("Failed to update workflow:", error);
@@ -452,12 +148,11 @@ function MeetingContent({
     [meeting.meetingId, onWorkflowUpdated]
   );
 
-  // Handle workflow delete
+  // Handle workflow delete from canvas
   const handleWorkflowDelete = useCallback(
     async (workflowId: string) => {
       try {
         await deleteWorkflow(meeting.meetingId, workflowId);
-        // Notify parent to update state
         onWorkflowDeleted?.(workflowId);
       } catch (error) {
         console.error("Failed to delete workflow:", error);
@@ -467,108 +162,61 @@ function MeetingContent({
     [meeting.meetingId, onWorkflowDeleted]
   );
 
-  return (
-    <div style={{ height: "100%", width: "100%" }} onClick={handleCanvasClick}>
-      {/* Transcript sidebar */}
-      {hasSidebar && (
-        <TranscriptSidebar
-          versions={versions}
-          currentVersion={data.currentState.version}
-          processingChunkIndex={processingChunkIndex}
-          totalChunks={meeting.totalChunks || 0}
+  // Handle workflow click from notes view - switch to canvas tab
+  const handleWorkflowClick = useCallback((workflowId: string) => {
+    // For now, just log - in future could scroll to workflow
+    console.log("Navigate to workflow:", workflowId);
+  }, []);
+
+  // Tab definitions
+  const tabs = [
+    {
+      id: "notes",
+      label: "Meeting Notes",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+      ),
+      content: (
+        <MeetingNotes
+          summary={state.meetingSummary}
+          workflows={state.workflows}
           isProcessing={isProcessing}
-          onVersionClick={onVersionChange}
+          processingChunkIndex={processingChunkIndex}
+          onWorkflowClick={handleWorkflowClick}
         />
-      )}
+      ),
+    },
+    {
+      id: "canvas",
+      label: "Canvas",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <line x1="3" y1="9" x2="21" y2="9" />
+          <line x1="9" y1="21" x2="9" y2="9" />
+        </svg>
+      ),
+      content: (
+        <CanvasView
+          workflows={state.workflows}
+          isEditable={isEditable}
+          onWorkflowUpdate={handleWorkflowUpdate}
+          onWorkflowDelete={handleWorkflowDelete}
+        />
+      ),
+    },
+  ];
 
-      <div style={{ marginLeft: hasSidebar ? "280px" : 0, height: "100%" }}>
-        <InfiniteCanvas>
-          {/* Notes block */}
-          <NotesBlock
-            position={notesPosition}
-            onPositionChange={setNotesPosition}
-            content={notesContent}
-            onContentChange={setNotesContent}
-            workflowCount={state.workflows.length}
-            width={notesSize.width}
-            height={notesSize.height}
-            onSizeChange={(w, h) => setNotesSize({ width: w, height: h })}
-            selected={selectedBlockId === "notes"}
-            onSelect={() => setSelectedBlockId("notes")}
-          />
-
-          {/* Workflow blocks from server */}
-          {state.workflows.map((workflow, index) => (
-            <WorkflowBlock
-              key={workflow.id}
-              workflow={workflow}
-              position={getWorkflowPos(workflow.id, index)}
-              onPositionChange={(pos) => handleWorkflowPositionChange(workflow.id, pos)}
-              selected={selectedBlockId === workflow.id}
-              onSelect={() => setSelectedBlockId(workflow.id)}
-              isEditable={isEditable}
-              onWorkflowUpdate={handleWorkflowUpdate}
-              onWorkflowDelete={handleWorkflowDelete}
-            />
-          ))}
-
-          {/* User-created blocks */}
-          {userBlocks.map((block) => {
-            if (block.type === "text") {
-              return (
-                <TextBlock
-                  key={block.id}
-                  position={block.position}
-                  onPositionChange={(pos, mx, my) => handleBlockPositionChange(block.id, pos, mx, my)}
-                  onDragStart={handleBlockDragStart}
-                  onDragEnd={(mx, my) => handleBlockDragEnd(block.id, mx, my)}
-                  content={block.content}
-                  onContentChange={(content) => handleTextContentChange(block.id, content)}
-                  width={block.width}
-                  onWidthChange={(width) => handleTextWidthChange(block.id, width)}
-                  selected={selectedBlockId === block.id}
-                  onSelect={() => setSelectedBlockId(block.id)}
-                />
-              );
-            }
-            if (block.type === "shape") {
-              return (
-                <ShapeBlock
-                  key={block.id}
-                  position={block.position}
-                  onPositionChange={(pos, mx, my) => handleBlockPositionChange(block.id, pos, mx, my)}
-                  onDragStart={handleBlockDragStart}
-                  onDragEnd={(mx, my) => handleBlockDragEnd(block.id, mx, my)}
-                  shape={block.shape}
-                  width={block.width}
-                  height={block.height}
-                  onSizeChange={(w, h) => handleShapeSizeChange(block.id, w, h)}
-                  color={block.color}
-                  onColorChange={(color) => handleShapeColorChange(block.id, color)}
-                  text={block.text}
-                  onTextChange={(text) => handleShapeTextChange(block.id, text)}
-                  selected={selectedBlockId === block.id}
-                  onSelect={() => setSelectedBlockId(block.id)}
-                />
-              );
-            }
-            return null;
-          })}
-        </InfiniteCanvas>
-      </div>
-
-      <Toolbar onAddText={handleAddText} onAddShape={handleAddShape} />
-      
-      {/* Trash zone - visible when dragging */}
-      {isDragging && <TrashZone isOver={isOverTrash} hasSidebar={hasSidebar} />}
-      
+  return (
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Header bar */}
       <div
         style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
           height: "var(--header-height)",
           background: "var(--bg-elevated)",
           borderBottom: "1px solid var(--border-subtle)",
@@ -576,7 +224,7 @@ function MeetingContent({
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 var(--space-md)",
-          zIndex: 100,
+          flexShrink: 0,
         }}
       >
         <button
@@ -647,6 +295,28 @@ function MeetingContent({
         </div>
       </div>
 
+      {/* Main content area */}
+      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+        {/* Transcript sidebar */}
+        {hasSidebar && (
+          <div style={{ width: 280, flexShrink: 0, borderRight: "1px solid var(--border-subtle)" }}>
+            <TranscriptSidebar
+              versions={versions}
+              currentVersion={data.currentState.version}
+              processingChunkIndex={processingChunkIndex}
+              totalChunks={meeting.totalChunks || 0}
+              isProcessing={isProcessing}
+              onVersionClick={onVersionChange}
+            />
+          </div>
+        )}
+
+        {/* Tab content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <SplitPanel tabs={tabs} defaultTabId="notes" />
+        </div>
+      </div>
+
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
@@ -663,12 +333,14 @@ function MeetingContent({
 export function Meeting() {
   const { meetingId } = useParams<{ meetingId: string }>();
   const navigate = useNavigate();
+  
   const [data, setData] = useState<MeetingResponse | null>(null);
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingChunkIndex, setProcessingChunkIndex] = useState<number | null>(null);
+  
   const eventSourceRef = useRef<EventSource | null>(null);
   
   // Cache for version data to avoid redundant fetches
@@ -678,37 +350,35 @@ export function Meeting() {
   // Debounce timer
   const debounceTimerRef = useRef<number | null>(null);
 
-  // Load meeting data
+  // Load initial data
   useEffect(() => {
     if (!meetingId) return;
     
-    async function load() {
+    const loadData = async () => {
       try {
-        // Load meeting with current state
-        const meetingRes = await getMeeting(meetingId!);
+        const [meetingRes, versionsRes] = await Promise.all([
+          getMeeting(meetingId),
+          getMeetingVersions(meetingId),
+        ]);
         setData(meetingRes);
+        setVersions(versionsRes.versions);
+        
         // Cache the initial version
         versionCacheRef.current.set(meetingRes.currentState.version, meetingRes);
-
-        // Load versions for sidebar
-        if (meetingRes.meeting.totalChunks) {
-          const versionsRes = await getMeetingVersions(meetingId!);
-          setVersions(versionsRes.versions);
-        }
-
-        // If meeting has a transcript and isn't finalized, subscribe to updates
-        if (meetingRes.meeting.status === "active" && meetingRes.meeting.transcript) {
-          subscribeToUpdates(meetingId!);
+        
+        // Check if meeting is being processed
+        if (meetingRes.meeting.status === "active") {
+          subscribeToUpdates(meetingId);
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load meeting");
       } finally {
         setLoading(false);
       }
-    }
-    load();
-
-    // Cleanup on unmount
+    };
+    
+    loadData();
+    
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -729,16 +399,12 @@ export function Meeting() {
       id,
       (message: SSEMessage) => {
         switch (message.type) {
-          case "connected":
-            console.log("Connected to SSE for meeting:", id);
-            break;
-          
           case "processing_started":
             setIsProcessing(true);
             break;
-          
+            
           case "chunk_processed":
-            if (message.currentState && message.chunkIndex !== undefined) {
+            if (message.currentState) {
               // Update current state with the new data
               setData(prev => {
                 if (!prev) return null;
@@ -750,43 +416,40 @@ export function Meeting() {
                 versionCacheRef.current.set(message.currentState!.version, updated);
                 return updated;
               });
-              
-              // Add to versions
-              setVersions(prev => {
-                const newVersion: VersionInfo = {
-                  version: message.version!,
-                  currentStateId: message.currentState!.currentStateId,
-                  chunkIndex: message.chunkIndex,
-                  chunkText: message.currentState!.data.chunkText,
-                };
-                // Check if already exists
-                if (prev.find(v => v.version === newVersion.version)) {
-                  return prev;
-                }
-                return [...prev, newVersion];
-              });
-              
+            }
+            if (message.chunkIndex !== undefined) {
               setProcessingChunkIndex(message.chunkIndex);
             }
+            if (message.version !== undefined) {
+              setVersions(prev => {
+                const exists = prev.some(v => v.version === message.version);
+                if (!exists && message.currentState) {
+                  return [...prev, {
+                    version: message.version!,
+                    currentStateId: message.currentState.currentStateId,
+                    chunkIndex: message.chunkIndex,
+                    chunkText: message.currentState.data.chunkText
+                  }];
+                }
+                return prev;
+              });
+            }
             break;
-          
+            
           case "processing_complete":
             setIsProcessing(false);
             setProcessingChunkIndex(null);
-            // Update meeting status
-            setData(prev => prev ? {
-              ...prev,
-              meeting: { ...prev.meeting, status: "finalized" }
-            } : null);
-            // Close SSE
             if (eventSourceRef.current) {
               eventSourceRef.current.close();
               eventSourceRef.current = null;
             }
+            // Reload to get finalized status
+            if (meetingId) {
+              getMeeting(meetingId).then(res => setData(res)).catch(console.error);
+            }
             break;
           
           case "keepalive":
-            // Ignore keepalive messages
             break;
         }
       },
@@ -795,7 +458,7 @@ export function Meeting() {
         setIsProcessing(false);
       }
     );
-  }, []);
+  }, [meetingId]);
 
   const handleVersionChange = useCallback((version: number) => {
     if (!meetingId) return;

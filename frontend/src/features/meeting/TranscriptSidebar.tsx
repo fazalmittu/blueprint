@@ -111,16 +111,11 @@ export function TranscriptSidebar({
 
       <style>{`
         .transcript-sidebar {
-          position: fixed;
-          top: var(--header-height);
-          left: 0;
-          bottom: 0;
-          width: 280px;
+          height: 100%;
           background: var(--bg-elevated);
-          border-right: 1px solid var(--border-subtle);
           display: flex;
           flex-direction: column;
-          z-index: 50;
+          overflow: hidden;
         }
 
         .sidebar-header {
