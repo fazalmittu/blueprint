@@ -309,3 +309,46 @@ export async function updateMeetingSummary(
   }
   return res.json();
 }
+
+// ==================== CHAT ENDPOINT ====================
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatAction {
+  type: "update_workflow" | "update_summary" | "none";
+  workflowId?: string;
+  nodes?: WorkflowNode[];
+  edges?: WorkflowEdge[];
+  newSummary?: string;
+}
+
+export interface ChatResponse {
+  message: string;
+  action?: ChatAction;
+}
+
+/**
+ * Send a chat message to the meeting assistant.
+ */
+export async function sendChatMessage(
+  meetingId: string,
+  message: string,
+  history: ChatMessage[] = []
+): Promise<ChatResponse> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, history }),
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Failed to send message" }));
+    throw new Error(error.error || "Failed to send message");
+  }
+  return res.json();
+}

@@ -12,10 +12,12 @@ import {
   type SSEMessage,
 } from "@/api/client";
 import type { Node, Edge } from "@xyflow/react";
+import type { Workflow } from "@/types";
 import { SplitPanel } from "./SplitPanel";
 import { MeetingNotes } from "./MeetingNotes";
 import { CanvasView } from "./CanvasView";
 import { TranscriptSidebar } from "./TranscriptSidebar";
+import { ChatPanel } from "./ChatPanel";
 
 /**
  * Loading state component.
@@ -100,6 +102,7 @@ function MeetingContent({
   onVersionChange,
   onWorkflowDeleted,
   onWorkflowUpdated,
+  onSummaryUpdated,
 }: { 
   data: MeetingResponse;
   versions: VersionInfo[];
@@ -108,17 +111,24 @@ function MeetingContent({
   onVersionChange: (version: number) => void;
   onWorkflowDeleted?: (workflowId: string) => void;
   onWorkflowUpdated?: (workflowId: string, nodes: { id: string; type: "process" | "decision" | "terminal"; label: string; variant?: "start" | "end" }[], edges: { id: string; source: string; target: string; label?: string }[]) => void;
+  onSummaryUpdated?: (newSummary: string) => void;
 }) {
   const navigate = useNavigate();
   const state = data.currentState.data;
   const meeting = data.meeting;
   const hasSidebar = meeting.totalChunks !== undefined && meeting.totalChunks > 0;
+  
+  // Cast workflows to the correct type (API and generated types are compatible)
+  const workflows = state.workflows as unknown as Workflow[];
 
   // Check if meeting is editable (finalized and not processing)
   const isEditable = meeting.status === "finalized" && !isProcessing;
 
   // Tab state
   const [activeTab, setActiveTab] = useState("notes");
+
+  // Chat panel state
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Handle workflow update from canvas
   const handleWorkflowUpdate = useCallback(
@@ -208,7 +218,7 @@ function MeetingContent({
       content: (
         <MeetingNotes
           summary={localSummary}
-          workflows={state.workflows}
+          workflows={workflows}
           isProcessing={isProcessing}
           processingChunkIndex={processingChunkIndex}
           onWorkflowClick={handleWorkflowClick}
@@ -229,7 +239,7 @@ function MeetingContent({
       ),
       content: (
         <CanvasView
-          workflows={state.workflows}
+          workflows={workflows}
           isEditable={isEditable}
           onWorkflowUpdate={handleWorkflowUpdate}
           onWorkflowDelete={handleWorkflowDelete}
@@ -333,6 +343,38 @@ function MeetingContent({
           >
             {isProcessing ? "processing" : meeting.status}
           </span>
+          
+          {/* Chat toggle button */}
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-xs)",
+              padding: "6px 12px",
+              background: isChatOpen ? "var(--accent)" : "var(--bg-tertiary)",
+              color: isChatOpen ? "white" : "var(--text-secondary)",
+              border: "none",
+              borderRadius: "var(--radius-md)",
+              cursor: "pointer",
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+              transition: "var(--transition-fast)",
+            }}
+            title={isChatOpen ? "Close chat" : "Open chat assistant"}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            Chat
+          </button>
         </div>
       </div>
 
@@ -361,6 +403,35 @@ function MeetingContent({
             onTabChange={setActiveTab}
           />
         </div>
+
+        {/* Chat panel */}
+        <ChatPanel
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          meetingId={meeting.meetingId}
+          meetingSummary={localSummary}
+          workflows={workflows}
+          onWorkflowUpdated={(workflowId, nodes, edges) => {
+            // Convert to the format expected by the parent handler
+            const convertedNodes = nodes.map(n => ({
+              id: n.id,
+              type: n.type as "process" | "decision" | "terminal",
+              label: n.label,
+              variant: n.variant,
+            }));
+            const convertedEdges = edges.map(e => ({
+              id: e.id,
+              source: e.source,
+              target: e.target,
+              label: e.label,
+            }));
+            onWorkflowUpdated?.(workflowId, convertedNodes, convertedEdges);
+          }}
+          onSummaryUpdated={(newSummary) => {
+            setLocalSummary(newSummary);
+            onSummaryUpdated?.(newSummary);
+          }}
+        />
       </div>
 
       <style>{`
@@ -598,6 +669,23 @@ export function Meeting() {
     );
   }, []);
 
+  const handleSummaryUpdated = useCallback((newSummary: string) => {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            currentState: {
+              ...prev.currentState,
+              data: {
+                ...prev.currentState.data,
+                meetingSummary: newSummary,
+              },
+            },
+          }
+        : null
+    );
+  }, []);
+
   if (!meetingId) {
     return <ErrorState message="Missing meeting ID" onBack={() => navigate("/")} />;
   }
@@ -619,6 +707,7 @@ export function Meeting() {
       onVersionChange={handleVersionChange}
       onWorkflowDeleted={handleWorkflowDeleted}
       onWorkflowUpdated={handleWorkflowUpdated}
+      onSummaryUpdated={handleSummaryUpdated}
     />
   );
 }

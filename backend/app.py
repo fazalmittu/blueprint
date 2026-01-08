@@ -575,6 +575,87 @@ def register_routes(app):
             'meetingSummary': new_summary
         }), 200
 
+    # ==================== CHAT ENDPOINT ====================
+
+    @app.route('/meeting/<meeting_id>/chat', methods=['POST'])
+    def chat_with_meeting(meeting_id: str):
+        """
+        Chat with an LLM that has context about the meeting.
+        
+        Request Body:
+            message (str): The user's message
+            history (list, optional): Previous conversation history
+        
+        Returns:
+            message (str): The assistant's response
+            action (object, optional): Any action to perform (update workflow, summary)
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        data = request.get_json()
+        if not data or 'message' not in data:
+            return jsonify({'error': 'message is required'}), 400
+        
+        user_message = data['message']
+        history = data.get('history', [])
+        
+        # Get current meeting state
+        latest_state = db.get_latest_state_version(meeting_id)
+        if not latest_state:
+            return jsonify({'error': 'No state found for meeting'}), 404
+        
+        # Process the chat message with LLM
+        response = process_chat_message(
+            user_message=user_message,
+            history=history,
+            meeting_summary=latest_state.data.meetingSummary,
+            workflows=latest_state.data.workflows,
+            meeting_id=meeting_id
+        )
+        
+        # If there's an action, apply it
+        if response.get('action'):
+            action = response['action']
+            if action['type'] == 'update_workflow' and action.get('workflowId'):
+                # Find and update the workflow
+                workflows = list(latest_state.data.workflows) if latest_state.data.workflows else []
+                for i, w in enumerate(workflows):
+                    if w.id == action['workflowId']:
+                        # Parse nodes
+                        nodes = []
+                        for node_data in action.get('nodes', []):
+                            node = Node(
+                                id=node_data.get('id', f'n{len(nodes)}'),
+                                type=NodeType(node_data.get('type', 'process')),
+                                label=node_data.get('label', 'Untitled'),
+                                variant=NodeVariant(node_data['variant']) if node_data.get('variant') else None
+                            )
+                            nodes.append(node)
+                        
+                        # Parse edges
+                        edges = []
+                        for edge_data in action.get('edges', []):
+                            edge = Edge(
+                                id=edge_data.get('id', f'e{len(edges)}'),
+                                source=edge_data.get('source', ''),
+                                target=edge_data.get('target', ''),
+                                label=edge_data.get('label')
+                            )
+                            edges.append(edge)
+                        
+                        workflows[i].nodes = nodes
+                        workflows[i].edges = edges
+                        break
+                
+                db.update_latest_state_workflows(meeting_id, workflows)
+            
+            elif action['type'] == 'update_summary' and action.get('newSummary'):
+                db.update_latest_state_summary(meeting_id, action['newSummary'])
+        
+        return jsonify(response), 200
+
     # ==================== PROCESS ENDPOINT ====================
 
     @app.route('/process', methods=['POST'])
@@ -898,6 +979,113 @@ def process_with_llm(current_state_data: CurrentStateData, chunk: str, version: 
     updated_state.chunkText = chunk_text if chunk_text else chunk
     
     return updated_state
+
+
+def process_chat_message(
+    user_message: str,
+    history: list,
+    meeting_summary: str,
+    workflows: list,
+    meeting_id: str
+) -> dict:
+    """
+    Process a chat message with the meeting context.
+    
+    Args:
+        user_message: The user's message
+        history: Previous conversation history
+        meeting_summary: The current meeting summary
+        workflows: List of workflows in the meeting
+        meeting_id: The meeting ID for reference
+    
+    Returns:
+        dict with 'message' (response) and optional 'action' (workflow/summary update)
+    """
+    # Build the context about the meeting
+    workflows_context = []
+    for wf in workflows:
+        wf_dict = wf.model_dump(mode='json') if hasattr(wf, 'model_dump') else wf
+        workflows_context.append({
+            'id': wf_dict.get('id'),
+            'title': wf_dict.get('title'),
+            'nodes': wf_dict.get('nodes', []),
+            'edges': wf_dict.get('edges', [])
+        })
+    
+    system_prompt = f"""You are a helpful meeting assistant. You have access to the following meeting context:
+
+## Meeting Summary
+{meeting_summary if meeting_summary else "(No summary yet)"}
+
+## Workflows
+{json.dumps(workflows_context, indent=2) if workflows_context else "(No workflows yet)"}
+
+You can help the user by:
+1. **Summarizing** the meeting notes or specific parts
+2. **Answering questions** about the meeting content
+3. **Editing workflows** - adding, modifying, or removing steps
+
+When the user asks you to edit a workflow, you should return a JSON action in your response.
+
+IMPORTANT: Your response must be a valid JSON object with this structure:
+{{
+  "message": "Your response message to the user",
+  "action": null OR {{
+    "type": "update_workflow" | "update_summary",
+    "workflowId": "id of workflow to update (for update_workflow)",
+    "nodes": [...] (for update_workflow - full list of updated nodes),
+    "edges": [...] (for update_workflow - full list of updated edges),
+    "newSummary": "..." (for update_summary)
+  }}
+}}
+
+Node structure: {{"id": "n1", "type": "process|decision|terminal", "label": "Step name", "variant": "start|end" (only for terminal type)}}
+Edge structure: {{"id": "e1", "source": "n1", "target": "n2", "label": "optional label"}}
+
+When editing workflows:
+- Preserve existing node IDs when modifying (don't change IDs for unchanged nodes)
+- Use descriptive labels
+- Ensure edges connect valid nodes
+- Terminal nodes with variant "start" should be at the beginning
+- Terminal nodes with variant "end" should be at the end
+
+Be conversational and helpful. If you're not performing an action, set action to null."""
+
+    # Build messages for the API call
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add conversation history
+    for msg in history:
+        messages.append({
+            "role": msg.get("role", "user"),
+            "content": msg.get("content", "")
+        })
+    
+    # Add the current message
+    messages.append({"role": "user", "content": user_message})
+    
+    try:
+        response = client.chat.completions.create(
+            model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
+            messages=messages,
+            temperature=0.7,
+            response_format={"type": "json_object"}
+        )
+        
+        raw_content = response.choices[0].message.content
+        result = json.loads(raw_content)
+        
+        return {
+            'message': result.get('message', 'I apologize, but I could not generate a response.'),
+            'action': result.get('action')
+        }
+        
+    except Exception as e:
+        print(f"Error in process_chat_message: {e}")
+        return {
+            'message': f"I apologize, but I encountered an error processing your request. Please try again.",
+            'action': None
+        }
 
 
 def generate_meeting_title(meeting_summary: str, transcript: str = None) -> str:
