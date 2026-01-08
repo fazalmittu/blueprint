@@ -22,6 +22,28 @@ export interface MeetingsResponse {
   }[];
 }
 
+export interface WorkflowNode {
+  id: string;
+  type: "process" | "decision" | "terminal";
+  label: string;
+  variant?: "start" | "end";
+}
+
+export interface WorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+}
+
+export interface Workflow {
+  id: string;
+  title: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  sources: string[];
+}
+
 export interface MeetingResponse {
   meeting: {
     meetingId: string;
@@ -35,12 +57,7 @@ export interface MeetingResponse {
     currentStateId: string;
     data: {
       meetingSummary: string;
-      workflows: {
-        id: string;
-        title: string;
-        mermaidDiagram: string;
-        sources: string[];
-      }[];
+      workflows: Workflow[];
       chunkIndex?: number;
       chunkText?: string;
     };
@@ -171,13 +188,6 @@ export function subscribeMeetingUpdates(
 
 // ==================== WORKFLOW ENDPOINTS ====================
 
-export interface Workflow {
-  id: string;
-  title: string;
-  mermaidDiagram: string;
-  sources: string[];
-}
-
 export interface WorkflowResponse {
   workflow: Workflow;
 }
@@ -189,12 +199,14 @@ export interface DeleteWorkflowResponse {
 
 export interface CreateWorkflowRequest {
   title: string;
-  mermaidDiagram: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
 }
 
 export interface UpdateWorkflowRequest {
   title?: string;
-  mermaidDiagram?: string;
+  nodes?: WorkflowNode[];
+  edges?: WorkflowEdge[];
 }
 
 /**

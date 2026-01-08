@@ -15,7 +15,7 @@ from database import DB_PATH, init_db, create_meeting, add_state_version, get_db
 from models import Meeting, CurrentStateVersion
 from models.meeting_schema import Status
 from models.currentStateVersion_schema import Data as CurrentStateData
-from models.workflow_schema import Model as Workflow
+from models.workflow_schema import Model as Workflow, Node, Edge, Type as NodeType, Variant as NodeVariant
 
 
 def clear_database():
@@ -42,120 +42,195 @@ def create_fake_meetings():
     fake_data = [
         {
             "org_id": "acme-corp",
-            "summary": "Discussed Q1 roadmap priorities. Team agreed to focus on customer onboarding improvements and API v2 launch. Sarah will lead the onboarding workstream, Mike handles API development.",
+            "summary": "• Discussed Q1 roadmap priorities\n• Team agreed to focus on customer onboarding improvements\n• API v2 launch scheduled for end of quarter\n• Sarah will lead the onboarding workstream\n• Mike handles API development",
             "workflows": [
                 {
                     "title": "Customer Onboarding Process",
-                    "mermaid": """flowchart TD
-    A[New Customer Signs Up] --> B[Welcome Email Sent]
-    B --> C[Account Setup Wizard]
-    C --> D{Completed Setup?}
-    D -->|Yes| E[Assign Success Manager]
-    D -->|No| F[Send Reminder Email]
-    F --> C
-    E --> G[Schedule Kickoff Call]
-    G --> H[30-Day Check-in]""",
+                    "nodes": [
+                        {"id": "n1", "type": "terminal", "label": "New Customer Signs Up", "variant": "start"},
+                        {"id": "n2", "type": "process", "label": "Welcome Email Sent"},
+                        {"id": "n3", "type": "process", "label": "Account Setup Wizard"},
+                        {"id": "n4", "type": "decision", "label": "Completed Setup?"},
+                        {"id": "n5", "type": "process", "label": "Assign Success Manager"},
+                        {"id": "n6", "type": "process", "label": "Send Reminder Email"},
+                        {"id": "n7", "type": "process", "label": "Schedule Kickoff Call"},
+                        {"id": "n8", "type": "terminal", "label": "30-Day Check-in", "variant": "end"},
+                    ],
+                    "edges": [
+                        {"id": "e1", "source": "n1", "target": "n2"},
+                        {"id": "e2", "source": "n2", "target": "n3"},
+                        {"id": "e3", "source": "n3", "target": "n4"},
+                        {"id": "e4", "source": "n4", "target": "n5", "label": "Yes"},
+                        {"id": "e5", "source": "n4", "target": "n6", "label": "No"},
+                        {"id": "e6", "source": "n6", "target": "n3"},
+                        {"id": "e7", "source": "n5", "target": "n7"},
+                        {"id": "e8", "source": "n7", "target": "n8"},
+                    ],
                     "sources": ["chunk_0", "chunk_1", "chunk_2"]
                 },
                 {
                     "title": "API Release Process",
-                    "mermaid": """flowchart TD
-    A[Feature Complete] --> B[Internal Testing]
-    B --> C[Security Review]
-    C --> D[Beta Release]
-    D --> E[Gather Feedback]
-    E --> F{Issues Found?}
-    F -->|Yes| G[Fix Issues]
-    G --> B
-    F -->|No| H[Production Release]
-    H --> I[Update Documentation]""",
+                    "nodes": [
+                        {"id": "n1", "type": "terminal", "label": "Feature Complete", "variant": "start"},
+                        {"id": "n2", "type": "process", "label": "Internal Testing"},
+                        {"id": "n3", "type": "process", "label": "Security Review"},
+                        {"id": "n4", "type": "process", "label": "Beta Release"},
+                        {"id": "n5", "type": "process", "label": "Gather Feedback"},
+                        {"id": "n6", "type": "decision", "label": "Issues Found?"},
+                        {"id": "n7", "type": "process", "label": "Fix Issues"},
+                        {"id": "n8", "type": "process", "label": "Production Release"},
+                        {"id": "n9", "type": "terminal", "label": "Update Documentation", "variant": "end"},
+                    ],
+                    "edges": [
+                        {"id": "e1", "source": "n1", "target": "n2"},
+                        {"id": "e2", "source": "n2", "target": "n3"},
+                        {"id": "e3", "source": "n3", "target": "n4"},
+                        {"id": "e4", "source": "n4", "target": "n5"},
+                        {"id": "e5", "source": "n5", "target": "n6"},
+                        {"id": "e6", "source": "n6", "target": "n7", "label": "Yes"},
+                        {"id": "e7", "source": "n7", "target": "n2"},
+                        {"id": "e8", "source": "n6", "target": "n8", "label": "No"},
+                        {"id": "e9", "source": "n8", "target": "n9"},
+                    ],
                     "sources": ["chunk_3", "chunk_4"]
                 }
             ]
         },
         {
             "org_id": "startup-inc",
-            "summary": "Sprint retrospective meeting. Team identified bottlenecks in code review process. Decision to implement pair programming for complex features and automate deployment pipeline.",
+            "summary": "• Sprint retrospective meeting held\n• Team identified bottlenecks in code review process\n• Decision to implement pair programming for complex features\n• Will automate deployment pipeline",
             "workflows": [
                 {
                     "title": "Code Review Workflow",
-                    "mermaid": """flowchart TD
-    A[Developer Creates PR] --> B[Automated Tests Run]
-    B --> C{Tests Pass?}
-    C -->|No| D[Developer Fixes Issues]
-    D --> B
-    C -->|Yes| E[Request Code Review]
-    E --> F[Reviewer Assigned]
-    F --> G{Approved?}
-    G -->|No| H[Address Feedback]
-    H --> E
-    G -->|Yes| I[Merge to Main]
-    I --> J[Auto Deploy to Staging]""",
+                    "nodes": [
+                        {"id": "n1", "type": "terminal", "label": "Developer Creates PR", "variant": "start"},
+                        {"id": "n2", "type": "process", "label": "Automated Tests Run"},
+                        {"id": "n3", "type": "decision", "label": "Tests Pass?"},
+                        {"id": "n4", "type": "process", "label": "Developer Fixes Issues"},
+                        {"id": "n5", "type": "process", "label": "Request Code Review"},
+                        {"id": "n6", "type": "process", "label": "Reviewer Assigned"},
+                        {"id": "n7", "type": "decision", "label": "Approved?"},
+                        {"id": "n8", "type": "process", "label": "Address Feedback"},
+                        {"id": "n9", "type": "process", "label": "Merge to Main"},
+                        {"id": "n10", "type": "terminal", "label": "Auto Deploy to Staging", "variant": "end"},
+                    ],
+                    "edges": [
+                        {"id": "e1", "source": "n1", "target": "n2"},
+                        {"id": "e2", "source": "n2", "target": "n3"},
+                        {"id": "e3", "source": "n3", "target": "n4", "label": "No"},
+                        {"id": "e4", "source": "n4", "target": "n2"},
+                        {"id": "e5", "source": "n3", "target": "n5", "label": "Yes"},
+                        {"id": "e6", "source": "n5", "target": "n6"},
+                        {"id": "e7", "source": "n6", "target": "n7"},
+                        {"id": "e8", "source": "n7", "target": "n8", "label": "No"},
+                        {"id": "e9", "source": "n8", "target": "n5"},
+                        {"id": "e10", "source": "n7", "target": "n9", "label": "Yes"},
+                        {"id": "e11", "source": "n9", "target": "n10"},
+                    ],
                     "sources": ["chunk_0", "chunk_1"]
                 }
             ]
         },
         {
             "org_id": "enterprise-solutions",
-            "summary": "Incident post-mortem for last week's outage. Root cause was database connection pool exhaustion. Action items: implement connection monitoring, add circuit breakers, and improve alerting thresholds.",
+            "summary": "• Incident post-mortem for last week's outage\n• Root cause: database connection pool exhaustion\n• Action item: implement connection monitoring\n• Action item: add circuit breakers\n• Action item: improve alerting thresholds",
             "workflows": [
                 {
                     "title": "Incident Response Process",
-                    "mermaid": """flowchart TD
-    A[Alert Triggered] --> B[On-Call Notified]
-    B --> C[Initial Assessment]
-    C --> D{Severity Level?}
-    D -->|Critical| E[War Room Created]
-    D -->|High| F[Senior Engineer Paged]
-    D -->|Medium| G[Normal Handling]
-    E --> H[Identify Root Cause]
-    F --> H
-    G --> H
-    H --> I[Implement Fix]
-    I --> J[Verify Resolution]
-    J --> K[Post-Mortem Scheduled]""",
+                    "nodes": [
+                        {"id": "n1", "type": "terminal", "label": "Alert Triggered", "variant": "start"},
+                        {"id": "n2", "type": "process", "label": "On-Call Notified"},
+                        {"id": "n3", "type": "process", "label": "Initial Assessment"},
+                        {"id": "n4", "type": "decision", "label": "Severity Level?"},
+                        {"id": "n5", "type": "process", "label": "War Room Created"},
+                        {"id": "n6", "type": "process", "label": "Senior Engineer Paged"},
+                        {"id": "n7", "type": "process", "label": "Normal Handling"},
+                        {"id": "n8", "type": "process", "label": "Identify Root Cause"},
+                        {"id": "n9", "type": "process", "label": "Implement Fix"},
+                        {"id": "n10", "type": "process", "label": "Verify Resolution"},
+                        {"id": "n11", "type": "terminal", "label": "Post-Mortem Scheduled", "variant": "end"},
+                    ],
+                    "edges": [
+                        {"id": "e1", "source": "n1", "target": "n2"},
+                        {"id": "e2", "source": "n2", "target": "n3"},
+                        {"id": "e3", "source": "n3", "target": "n4"},
+                        {"id": "e4", "source": "n4", "target": "n5", "label": "Critical"},
+                        {"id": "e5", "source": "n4", "target": "n6", "label": "High"},
+                        {"id": "e6", "source": "n4", "target": "n7", "label": "Medium"},
+                        {"id": "e7", "source": "n5", "target": "n8"},
+                        {"id": "e8", "source": "n6", "target": "n8"},
+                        {"id": "e9", "source": "n7", "target": "n8"},
+                        {"id": "e10", "source": "n8", "target": "n9"},
+                        {"id": "e11", "source": "n9", "target": "n10"},
+                        {"id": "e12", "source": "n10", "target": "n11"},
+                    ],
                     "sources": ["chunk_0", "chunk_2", "chunk_3"]
                 },
                 {
                     "title": "Database Monitoring Setup",
-                    "mermaid": """flowchart TD
-    A[Connection Pool Metric] --> B{Usage > 80%?}
-    B -->|Yes| C[Warning Alert]
-    B -->|No| D[Continue Monitoring]
-    C --> E{Usage > 95%?}
-    E -->|Yes| F[Critical Alert]
-    E -->|No| G[Log Warning]
-    F --> H[Auto-Scale Triggered]
-    H --> I[Notify Team]""",
+                    "nodes": [
+                        {"id": "n1", "type": "terminal", "label": "Connection Pool Metric", "variant": "start"},
+                        {"id": "n2", "type": "decision", "label": "Usage > 80%?"},
+                        {"id": "n3", "type": "process", "label": "Warning Alert"},
+                        {"id": "n4", "type": "process", "label": "Continue Monitoring"},
+                        {"id": "n5", "type": "decision", "label": "Usage > 95%?"},
+                        {"id": "n6", "type": "process", "label": "Critical Alert"},
+                        {"id": "n7", "type": "process", "label": "Log Warning"},
+                        {"id": "n8", "type": "process", "label": "Auto-Scale Triggered"},
+                        {"id": "n9", "type": "terminal", "label": "Notify Team", "variant": "end"},
+                    ],
+                    "edges": [
+                        {"id": "e1", "source": "n1", "target": "n2"},
+                        {"id": "e2", "source": "n2", "target": "n3", "label": "Yes"},
+                        {"id": "e3", "source": "n2", "target": "n4", "label": "No"},
+                        {"id": "e4", "source": "n3", "target": "n5"},
+                        {"id": "e5", "source": "n5", "target": "n6", "label": "Yes"},
+                        {"id": "e6", "source": "n5", "target": "n7", "label": "No"},
+                        {"id": "e7", "source": "n6", "target": "n8"},
+                        {"id": "e8", "source": "n8", "target": "n9"},
+                    ],
                     "sources": ["chunk_4", "chunk_5"]
                 }
             ]
         },
         {
             "org_id": "acme-corp",
-            "summary": "Product design review for mobile app redesign. Agreed on new navigation structure and updated color scheme. UX team will create prototypes by next Friday.",
+            "summary": "• Product design review for mobile app redesign\n• Agreed on new navigation structure\n• Updated color scheme approved\n• UX team will create prototypes by next Friday",
             "workflows": [
                 {
                     "title": "Design Review Process",
-                    "mermaid": """flowchart TD
-    A[Designer Creates Mockups] --> B[Internal Design Review]
-    B --> C{Approved?}
-    C -->|No| D[Iterate on Feedback]
-    D --> B
-    C -->|Yes| E[Stakeholder Presentation]
-    E --> F{Changes Needed?}
-    F -->|Yes| G[Document Changes]
-    G --> D
-    F -->|No| H[Create Prototype]
-    H --> I[User Testing]
-    I --> J[Final Approval]""",
+                    "nodes": [
+                        {"id": "n1", "type": "terminal", "label": "Designer Creates Mockups", "variant": "start"},
+                        {"id": "n2", "type": "process", "label": "Internal Design Review"},
+                        {"id": "n3", "type": "decision", "label": "Approved?"},
+                        {"id": "n4", "type": "process", "label": "Iterate on Feedback"},
+                        {"id": "n5", "type": "process", "label": "Stakeholder Presentation"},
+                        {"id": "n6", "type": "decision", "label": "Changes Needed?"},
+                        {"id": "n7", "type": "process", "label": "Document Changes"},
+                        {"id": "n8", "type": "process", "label": "Create Prototype"},
+                        {"id": "n9", "type": "process", "label": "User Testing"},
+                        {"id": "n10", "type": "terminal", "label": "Final Approval", "variant": "end"},
+                    ],
+                    "edges": [
+                        {"id": "e1", "source": "n1", "target": "n2"},
+                        {"id": "e2", "source": "n2", "target": "n3"},
+                        {"id": "e3", "source": "n3", "target": "n4", "label": "No"},
+                        {"id": "e4", "source": "n4", "target": "n2"},
+                        {"id": "e5", "source": "n3", "target": "n5", "label": "Yes"},
+                        {"id": "e6", "source": "n5", "target": "n6"},
+                        {"id": "e7", "source": "n6", "target": "n7", "label": "Yes"},
+                        {"id": "e8", "source": "n7", "target": "n4"},
+                        {"id": "e9", "source": "n6", "target": "n8", "label": "No"},
+                        {"id": "e10", "source": "n8", "target": "n9"},
+                        {"id": "e11", "source": "n9", "target": "n10"},
+                    ],
                     "sources": ["chunk_0", "chunk_1", "chunk_2"]
                 }
             ]
         },
         {
             "org_id": "startup-inc",
-            "summary": "Empty meeting - no discussion topics were covered.",
+            "summary": "• Empty meeting - no discussion topics were covered.",
             "workflows": []
         }
     ]
@@ -178,10 +253,33 @@ def create_fake_meetings():
         # Create workflows from fake data
         workflows = []
         for wf_data in data["workflows"]:
+            # Parse nodes
+            nodes = []
+            for node_data in wf_data["nodes"]:
+                node = Node(
+                    id=node_data["id"],
+                    type=NodeType(node_data["type"]),
+                    label=node_data["label"],
+                    variant=NodeVariant(node_data["variant"]) if node_data.get("variant") else None
+                )
+                nodes.append(node)
+            
+            # Parse edges
+            edges = []
+            for edge_data in wf_data["edges"]:
+                edge = Edge(
+                    id=edge_data["id"],
+                    source=edge_data["source"],
+                    target=edge_data["target"],
+                    label=edge_data.get("label")
+                )
+                edges.append(edge)
+            
             workflow = Workflow(
                 id=str(uuid.uuid4()),
                 title=wf_data["title"],
-                mermaidDiagram=wf_data["mermaid"],
+                nodes=nodes,
+                edges=edges,
                 sources=wf_data["sources"]
             )
             workflows.append(workflow)
@@ -249,4 +347,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

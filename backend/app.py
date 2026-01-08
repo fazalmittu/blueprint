@@ -18,8 +18,9 @@ from models import (
 )
 from models.meeting_schema import Status
 from models.currentStateVersion_schema import Data as CurrentStateData
+from models.workflow_schema import Node, Edge, Type as NodeType, Variant as NodeVariant
+from prompts.chunk_processing import CHUNK_PROCESSING_SYSTEM_PROMPT, get_chunk_processing_user_prompt
 from dotenv import load_dotenv
-from prompts import CHUNK_PROCESSING_SYSTEM_PROMPT, get_chunk_processing_user_prompt
 from pathlib import Path
 import database as db
 
@@ -329,7 +330,8 @@ def register_routes(app):
         
         Request Body:
             title (str): The workflow title
-            mermaidDiagram (str): The mermaid diagram code
+            nodes (list): Array of node objects with id, type, label, variant
+            edges (list): Array of edge objects with id, source, target, label
         
         Returns:
             The created workflow
@@ -346,18 +348,36 @@ def register_routes(app):
             return jsonify({'error': 'Request body is required'}), 400
         
         title = data.get('title', '').strip()
-        mermaid_diagram = data.get('mermaidDiagram', '').strip()
+        nodes_data = data.get('nodes', [])
+        edges_data = data.get('edges', [])
         
         if not title:
             return jsonify({'error': 'title is required'}), 400
         
-        if not mermaid_diagram:
-            return jsonify({'error': 'mermaidDiagram is required'}), 400
+        if not nodes_data:
+            return jsonify({'error': 'nodes array is required'}), 400
         
-        # Validate mermaid syntax
-        is_valid, error_msg = validate_mermaid_syntax(mermaid_diagram)
-        if not is_valid:
-            return jsonify({'error': f'Invalid mermaid syntax: {error_msg}'}), 400
+        # Parse nodes
+        nodes = []
+        for node_data in nodes_data:
+            node = Node(
+                id=node_data.get('id', f'n{len(nodes)}'),
+                type=NodeType(node_data.get('type', 'process')),
+                label=node_data.get('label', 'Untitled'),
+                variant=NodeVariant(node_data['variant']) if node_data.get('variant') else None
+            )
+            nodes.append(node)
+        
+        # Parse edges
+        edges = []
+        for edge_data in edges_data:
+            edge = Edge(
+                id=edge_data.get('id', f'e{len(edges)}'),
+                source=edge_data.get('source', ''),
+                target=edge_data.get('target', ''),
+                label=edge_data.get('label')
+            )
+            edges.append(edge)
         
         # Get current workflows
         latest_state = db.get_latest_state_version(meeting_id)
@@ -368,7 +388,8 @@ def register_routes(app):
         new_workflow = Workflow(
             id=str(uuid.uuid4()),
             title=title,
-            mermaidDiagram=mermaid_diagram,
+            nodes=nodes,
+            edges=edges,
             sources=['user_created']
         )
         
@@ -392,7 +413,8 @@ def register_routes(app):
         
         Request Body:
             title (str, optional): New title
-            mermaidDiagram (str, optional): New mermaid diagram code
+            nodes (list, optional): New nodes array
+            edges (list, optional): New edges array
         
         Returns:
             The updated workflow
@@ -429,17 +451,36 @@ def register_routes(app):
                 return jsonify({'error': 'title cannot be empty'}), 400
             workflow.title = new_title
         
-        if 'mermaidDiagram' in data:
-            new_diagram = data['mermaidDiagram'].strip()
-            if not new_diagram:
-                return jsonify({'error': 'mermaidDiagram cannot be empty'}), 400
+        if 'nodes' in data:
+            nodes_data = data['nodes']
+            if not nodes_data:
+                return jsonify({'error': 'nodes cannot be empty'}), 400
             
-            # Validate mermaid syntax
-            is_valid, error_msg = validate_mermaid_syntax(new_diagram)
-            if not is_valid:
-                return jsonify({'error': f'Invalid mermaid syntax: {error_msg}'}), 400
-            
-            workflow.mermaidDiagram = new_diagram
+            # Parse nodes
+            nodes = []
+            for node_data in nodes_data:
+                node = Node(
+                    id=node_data.get('id', f'n{len(nodes)}'),
+                    type=NodeType(node_data.get('type', 'process')),
+                    label=node_data.get('label', 'Untitled'),
+                    variant=NodeVariant(node_data['variant']) if node_data.get('variant') else None
+                )
+                nodes.append(node)
+            workflow.nodes = nodes
+        
+        if 'edges' in data:
+            edges_data = data['edges']
+            # Edges can be empty (no connections)
+            edges = []
+            for edge_data in edges_data:
+                edge = Edge(
+                    id=edge_data.get('id', f'e{len(edges)}'),
+                    source=edge_data.get('source', ''),
+                    target=edge_data.get('target', ''),
+                    label=edge_data.get('label')
+                )
+                edges.append(edge)
+            workflow.edges = edges
         
         # Update in database
         workflows[workflow_index] = workflow
@@ -618,67 +659,6 @@ def process_transcript_chunks(meeting_id: str, chunks: list[str]):
 
 # ==================== HELPER FUNCTIONS ====================
 
-def validate_mermaid_syntax(diagram: str) -> tuple[bool, str | None]:
-    """
-    Validate basic mermaid flowchart syntax.
-    
-    Args:
-        diagram: The mermaid diagram string
-    
-    Returns:
-        Tuple of (is_valid, error_message)
-        error_message is None if valid
-    """
-    if not diagram or not diagram.strip():
-        return False, "Diagram cannot be empty"
-    
-    lines = diagram.strip().split('\n')
-    first_line = lines[0].strip().lower()
-    
-    # Must start with a valid diagram type
-    valid_starts = ['flowchart td', 'flowchart tb', 'flowchart lr', 'flowchart rl', 
-                    'flowchart bt', 'graph td', 'graph tb', 'graph lr', 'graph rl']
-    if not any(first_line.startswith(start) for start in valid_starts):
-        return False, "Diagram must start with 'flowchart TD' or similar direction (TD, TB, LR, RL, BT)"
-    
-    # Check for common syntax errors
-    for i, line in enumerate(lines[1:], start=2):
-        line = line.strip()
-        if not line:
-            continue
-        
-        # Skip subgraph and end keywords
-        if line.lower().startswith('subgraph') or line.lower() == 'end':
-            continue
-        
-        # Skip comments
-        if line.startswith('%%'):
-            continue
-        
-        # Check for markdown code fence (common mistake)
-        if line.startswith('```'):
-            return False, f"Line {i}: Remove markdown code fences (```). Just use raw mermaid syntax"
-        
-        # Check for invalid arrow syntax
-        if '->' in line and '-->' not in line and '-.>' not in line:
-            if '->>' not in line and '-.->' not in line:
-                return False, f"Line {i}: Use '-->' for arrows, not '->'"
-        
-        # Check for node definitions without IDs (common mistake)
-        # e.g., "[Start]" instead of "A[Start]"
-        if re.match(r'^\s*\[[^\]]+\]\s*-->', line):
-            return False, f"Line {i}: Nodes need IDs before brackets. Use 'A[Label]' not '[Label]'"
-        
-        # Check for spaces in node IDs (before brackets)
-        node_match = re.match(r'^\s*([a-zA-Z0-9_\s]+)\[', line)
-        if node_match:
-            node_id = node_match.group(1).strip()
-            if ' ' in node_id:
-                return False, f"Line {i}: Node ID '{node_id}' cannot contain spaces. Use underscores instead"
-    
-    return True, None
-
-
 def get_initial_state() -> CurrentStateData:
     """
     Returns the initial currentState data structure.
@@ -754,13 +734,36 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
         
         result = json.loads(response.choices[0].message.content)
         
-        # Parse workflows into Workflow models, ensuring required fields
+        # Parse workflows into Workflow models with nodes/edges
         workflows = []
         for wf_data in result.get('workflows', []):
+            # Parse nodes
+            nodes = []
+            for node_data in wf_data.get('nodes', []):
+                node = Node(
+                    id=node_data.get('id', f'n{len(nodes)}'),
+                    type=NodeType(node_data.get('type', 'process')),
+                    label=node_data.get('label', 'Untitled'),
+                    variant=NodeVariant(node_data['variant']) if node_data.get('variant') else None
+                )
+                nodes.append(node)
+            
+            # Parse edges
+            edges = []
+            for edge_data in wf_data.get('edges', []):
+                edge = Edge(
+                    id=edge_data.get('id', f'e{len(edges)}'),
+                    source=edge_data.get('source', ''),
+                    target=edge_data.get('target', ''),
+                    label=edge_data.get('label')
+                )
+                edges.append(edge)
+            
             workflow = Workflow(
                 id=wf_data.get('id', str(uuid.uuid4())),
                 title=wf_data.get('title', 'Untitled Workflow'),
-                mermaidDiagram=wf_data.get('mermaidDiagram', ''),
+                nodes=nodes,
+                edges=edges,
                 sources=wf_data.get('sources', [])
             )
             workflows.append(workflow)

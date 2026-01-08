@@ -17,7 +17,23 @@ export interface SocketEvent {
 export interface Workflow {
   id: string;
   title: string;
-  mermaidDiagram: string;
+  nodes: {
+    id: string;
+    type: "process" | "decision" | "terminal";
+    label: string;
+    /**
+     * Only used when type is 'terminal'
+     */
+    variant?: "start" | "end";
+    [k: string]: unknown;
+  }[];
+  edges: {
+    id: string;
+    source: string;
+    target: string;
+    label?: string;
+    [k: string]: unknown;
+  }[];
   sources: string[];
   [k: string]: unknown;
 }

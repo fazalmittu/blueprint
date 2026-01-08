@@ -10,7 +10,7 @@ from typing import Optional
 from models import Meeting, CurrentStateVersion
 from models.meeting_schema import Status
 from models.currentStateVersion_schema import Data as CurrentStateData
-from models.workflow_schema import Model as Workflow
+from models.workflow_schema import Model as Workflow, Node, Edge, Type as NodeType, Variant as NodeVariant
 
 
 # Database file path (in project root, outside backend folder)
@@ -190,7 +190,7 @@ def get_meetings_by_org(org_id: str) -> list[Meeting]:
 
 def _serialize_state_data(data: CurrentStateData) -> str:
     """Serialize CurrentStateData to JSON string."""
-    return json.dumps(data.model_dump())
+    return json.dumps(data.model_dump(mode='json'))
 
 
 def _deserialize_state_data(json_str: str) -> CurrentStateData:
@@ -200,10 +200,33 @@ def _deserialize_state_data(json_str: str) -> CurrentStateData:
     # Reconstruct workflows
     workflows = []
     for wf_data in data_dict.get('workflows', []):
+        # Parse nodes
+        nodes = []
+        for node_data in wf_data.get('nodes', []):
+            node = Node(
+                id=node_data['id'],
+                type=NodeType(node_data['type']),
+                label=node_data['label'],
+                variant=NodeVariant(node_data['variant']) if node_data.get('variant') else None
+            )
+            nodes.append(node)
+        
+        # Parse edges
+        edges = []
+        for edge_data in wf_data.get('edges', []):
+            edge = Edge(
+                id=edge_data['id'],
+                source=edge_data['source'],
+                target=edge_data['target'],
+                label=edge_data.get('label')
+            )
+            edges.append(edge)
+        
         workflow = Workflow(
             id=wf_data['id'],
             title=wf_data['title'],
-            mermaidDiagram=wf_data['mermaidDiagram'],
+            nodes=nodes,
+            edges=edges,
             sources=wf_data['sources']
         )
         workflows.append(workflow)

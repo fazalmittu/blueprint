@@ -4,10 +4,13 @@ import {
   getMeeting, 
   getMeetingVersions, 
   subscribeMeetingUpdates,
+  updateWorkflow,
+  deleteWorkflow,
   type MeetingResponse, 
   type VersionInfo,
   type SSEMessage,
 } from "@/api/client";
+import type { Node, Edge } from "@xyflow/react";
 import { InfiniteCanvas } from "./InfiniteCanvas";
 import { Toolbar } from "./Toolbar";
 import { TranscriptSidebar } from "./TranscriptSidebar";
@@ -241,12 +244,16 @@ function MeetingContent({
   isProcessing,
   processingChunkIndex,
   onVersionChange,
+  onWorkflowDeleted,
+  onWorkflowUpdated,
 }: { 
   data: MeetingResponse;
   versions: VersionInfo[];
   isProcessing: boolean;
   processingChunkIndex: number | null;
   onVersionChange: (version: number) => void;
+  onWorkflowDeleted?: (workflowId: string) => void;
+  onWorkflowUpdated?: (workflowId: string, nodes: { id: string; type: "process" | "decision" | "terminal"; label: string; variant?: "start" | "end" }[], edges: { id: string; source: string; target: string; label?: string }[]) => void;
 }) {
   const navigate = useNavigate();
   const state = data.currentState.data;
@@ -408,6 +415,58 @@ function MeetingContent({
     setSelectedBlockId(null);
   }, []);
 
+  // Check if meeting is editable (finalized and not processing)
+  const isEditable = meeting.status === "finalized" && !isProcessing;
+
+  // Handle workflow update from editor
+  const handleWorkflowUpdate = useCallback(
+    async (workflowId: string, nodes: Node[], edges: Edge[]) => {
+      try {
+        // Convert React Flow nodes/edges to our workflow format
+        const workflowNodes = nodes.map((node) => ({
+          id: node.id,
+          type: (node.type || "process") as "process" | "decision" | "terminal",
+          label: (node.data as { label: string }).label || "Untitled",
+          variant: (node.data as { variant?: "start" | "end" }).variant,
+        }));
+
+        const workflowEdges = edges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          label: edge.label as string | undefined,
+        }));
+
+        await updateWorkflow(meeting.meetingId, workflowId, {
+          nodes: workflowNodes,
+          edges: workflowEdges,
+        });
+
+        // Notify parent to update state
+        onWorkflowUpdated?.(workflowId, workflowNodes, workflowEdges);
+      } catch (error) {
+        console.error("Failed to update workflow:", error);
+        alert(error instanceof Error ? error.message : "Failed to update workflow");
+      }
+    },
+    [meeting.meetingId, onWorkflowUpdated]
+  );
+
+  // Handle workflow delete
+  const handleWorkflowDelete = useCallback(
+    async (workflowId: string) => {
+      try {
+        await deleteWorkflow(meeting.meetingId, workflowId);
+        // Notify parent to update state
+        onWorkflowDeleted?.(workflowId);
+      } catch (error) {
+        console.error("Failed to delete workflow:", error);
+        alert(error instanceof Error ? error.message : "Failed to delete workflow");
+      }
+    },
+    [meeting.meetingId, onWorkflowDeleted]
+  );
+
   return (
     <div style={{ height: "100%", width: "100%" }} onClick={handleCanvasClick}>
       {/* Transcript sidebar */}
@@ -447,6 +506,9 @@ function MeetingContent({
               onPositionChange={(pos) => handleWorkflowPositionChange(workflow.id, pos)}
               selected={selectedBlockId === workflow.id}
               onSelect={() => setSelectedBlockId(workflow.id)}
+              isEditable={isEditable}
+              onWorkflowUpdate={handleWorkflowUpdate}
+              onWorkflowDelete={handleWorkflowDelete}
             />
           ))}
 
@@ -725,6 +787,50 @@ export function Meeting() {
     }
   }, [meetingId]);
 
+  const handleWorkflowDeleted = useCallback((workflowId: string) => {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            currentState: {
+              ...prev.currentState,
+              data: {
+                ...prev.currentState.data,
+                workflows: prev.currentState.data.workflows.filter(
+                  (w) => w.id !== workflowId
+                ),
+              },
+            },
+          }
+        : null
+    );
+  }, []);
+
+  const handleWorkflowUpdated = useCallback((
+    workflowId: string, 
+    nodes: { id: string; type: "process" | "decision" | "terminal"; label: string; variant?: "start" | "end" }[], 
+    edges: { id: string; source: string; target: string; label?: string }[]
+  ) => {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            currentState: {
+              ...prev.currentState,
+              data: {
+                ...prev.currentState.data,
+                workflows: prev.currentState.data.workflows.map((w) =>
+                  w.id === workflowId
+                    ? { ...w, nodes, edges }
+                    : w
+                ),
+              },
+            },
+          }
+        : null
+    );
+  }, []);
+
   if (!meetingId) {
     return <ErrorState message="Missing meeting ID" onBack={() => navigate("/")} />;
   }
@@ -744,6 +850,8 @@ export function Meeting() {
       isProcessing={isProcessing}
       processingChunkIndex={processingChunkIndex}
       onVersionChange={handleVersionChange}
+      onWorkflowDeleted={handleWorkflowDeleted}
+      onWorkflowUpdated={handleWorkflowUpdated}
     />
   );
 }

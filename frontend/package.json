@@ -11,7 +11,8 @@
     "simulator": "tsx test/ws-simulator.ts"
   },
   "dependencies": {
-    "mermaid": "^11.12.2",
+    "@dagrejs/dagre": "^1.1.8",
+    "@xyflow/react": "^12.10.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.11.0"

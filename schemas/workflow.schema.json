@@ -4,11 +4,43 @@
   "properties": {
     "id": { "type": "string" },
     "title": { "type": "string" },
-    "mermaidDiagram": { "type": "string" },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "type": { 
+            "type": "string", 
+            "enum": ["process", "decision", "terminal"] 
+          },
+          "label": { "type": "string" },
+          "variant": { 
+            "type": "string", 
+            "enum": ["start", "end"],
+            "description": "Only used when type is 'terminal'"
+          }
+        },
+        "required": ["id", "type", "label"]
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "source": { "type": "string" },
+          "target": { "type": "string" },
+          "label": { "type": "string" }
+        },
+        "required": ["id", "source", "target"]
+      }
+    },
     "sources": {
       "type": "array",
       "items": { "type": "string" }
     }
   },
-  "required": ["id", "title", "mermaidDiagram", "sources"]
+  "required": ["id", "title", "nodes", "edges", "sources"]
 }

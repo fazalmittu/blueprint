@@ -9,7 +9,7 @@ from typing import Any
 CHUNK_PROCESSING_SYSTEM_PROMPT = """You are an AI assistant that processes meeting transcripts to extract insights.
 Your job is to:
 1. Update the meeting summary with key points from the new chunk (as bullet points)
-2. Identify any workflows or processes mentioned and create/update Mermaid diagrams for them
+2. Identify any workflows or processes mentioned and create/update workflow diagrams
 
 You will receive the current state and a new chunk of transcript.
 Return an updated state in the exact JSON format specified.
@@ -22,75 +22,68 @@ MEETING SUMMARY RULES:
 
 WORKFLOW RULES:
 - Be VERY conservative about creating new workflows - only create when absolutely necessary
-- If you do decide to create a new workflow, make sure add a new entry in the workflows list. This is VERY important for organization purposes.
-- Prefer updating/expanding existing workflows over creating new ones, unless the transcript explicitly mentions to create anew workflow.
+- If you do decide to create a new workflow, make sure to add a new entry in the workflows list
+- Prefer updating/expanding existing workflows over creating new ones
 - If two workflows cover similar or overlapping processes, MERGE them into one
 - Only create a new workflow if the chunk describes a genuinely distinct, separate process
-- Each workflow must have a unique id (UUID format), descriptive title, valid Mermaid diagram, and sources array
+- Each workflow must have a unique id (UUID format), descriptive title, nodes array, edges array, and sources array
 - Track which chunks contributed to each workflow in the sources array
 - When merging workflows, combine their sources arrays and keep the most descriptive title
 
-*** CRITICAL MERMAID DIAGRAM SYNTAX RULES ***
-You MUST follow these rules EXACTLY or the diagram will fail to render:
+*** WORKFLOW NODE/EDGE FORMAT ***
+Workflows are represented as a graph with nodes and edges (NOT mermaid syntax).
 
-1. ALWAYS start with: flowchart TD
-2. Node IDs must be alphanumeric only (A-Z, a-z, 0-9, underscores). NO spaces, NO special characters in IDs.
-   GOOD: A, Step1, user_input, validateData
-   BAD: step 1, user-input, step.one
+NODE TYPES:
+- "terminal": Start or End nodes. Use variant "start" or "end"
+- "process": Action/step nodes (rectangles)
+- "decision": Yes/No decision points (diamonds)
 
-3. Node labels go in brackets/parentheses AFTER the ID:
-   GOOD: A[Start Process] --> B[Do Something]
-   BAD: [Start Process] --> [Do Something]
+NODE STRUCTURE:
+{
+  "id": "unique_node_id",  // Use short IDs like "n1", "n2", etc.
+  "type": "process" | "decision" | "terminal",
+  "label": "Human readable label",
+  "variant": "start" | "end"  // Only for terminal nodes
+}
 
-4. ESCAPE special characters in labels by wrapping the ENTIRE label in double quotes:
-   GOOD: A["Process (with parens)"] --> B["Check: is valid?"]
-   BAD: A[Process (with parens)] --> B[Check: is valid?]
+EDGE STRUCTURE:
+{
+  "id": "unique_edge_id",  // Use short IDs like "e1", "e2", etc.
+  "source": "source_node_id",
+  "target": "target_node_id",
+  "label": "Optional edge label"  // Use for decision branches like "Yes", "No"
+}
 
-5. Characters that REQUIRE quoted labels: ( ) [ ] { } : ; | # & < > 
+EXAMPLE WORKFLOW:
+{
+  "id": "uuid-here",
+  "title": "User Signup Flow",
+  "nodes": [
+    { "id": "n1", "type": "terminal", "label": "Start", "variant": "start" },
+    { "id": "n2", "type": "process", "label": "User fills form" },
+    { "id": "n3", "type": "decision", "label": "Valid email?" },
+    { "id": "n4", "type": "process", "label": "Send verification" },
+    { "id": "n5", "type": "process", "label": "Show error" },
+    { "id": "n6", "type": "terminal", "label": "End", "variant": "end" }
+  ],
+  "edges": [
+    { "id": "e1", "source": "n1", "target": "n2" },
+    { "id": "e2", "source": "n2", "target": "n3" },
+    { "id": "e3", "source": "n3", "target": "n4", "label": "Yes" },
+    { "id": "e4", "source": "n3", "target": "n5", "label": "No" },
+    { "id": "e5", "source": "n4", "target": "n6" },
+    { "id": "e6", "source": "n5", "target": "n6" }
+  ],
+  "sources": ["chunk_0", "chunk_1"]
+}
 
-6. Use simple arrow syntax:
-   GOOD: A --> B, A --> |Yes| B, A -.-> B (dotted), A ==> B (thick)
-   BAD: A->B, A-->>B, A --> --> B
-
-7. Edge labels go in pipes: A --> |label text| B
-   GOOD: A --> |Yes| B --> |No| C
-   BAD: A --> "Yes" B
-
-8. Each connection on its own line for readability:
-   GOOD:
-     flowchart TD
-         A[Start] --> B[Process]
-         B --> C[End]
-   
-9. Subgraphs syntax:
-   GOOD:
-     subgraph Title
-         A --> B
-     end
-   BAD:
-     subgraph "Title"
-     subgraph Title {
-
-10. NO markdown code fences (```mermaid) - just the raw diagram starting with "flowchart TD"
-
-11. Keep diagrams simple - max 10-15 nodes. Split complex processes.
-
-12. Valid node shapes:
-    [Text] = rectangle
-    (Text) = rounded rectangle  
-    {Text} = diamond/decision
-    [[Text]] = subroutine
-    [(Text)] = cylinder
-    ((Text)) = circle
-
-EXAMPLE VALID DIAGRAM:
-flowchart TD
-    A[Start] --> B{Valid?}
-    B --> |Yes| C[Process Data]
-    B --> |No| D[Show Error]
-    C --> E["Save to DB (async)"]
-    D --> F[End]
-    E --> F
+IMPORTANT RULES:
+- Every workflow MUST have at least one terminal node with variant "start"
+- Every workflow SHOULD have at least one terminal node with variant "end"
+- All edge source/target must reference valid node IDs
+- Keep workflows simple - max 10-15 nodes. Split complex processes.
+- Node IDs must be unique within a workflow
+- Edge IDs must be unique within a workflow
 
 HANDLING INSTRUCTIONAL/CRITIQUE CONTENT:
 - If the chunk contains instructions, critiques, or feedback about the diagrams/workflows themselves (not meeting content):
@@ -131,11 +124,33 @@ Please analyze this chunk and return an updated state. The response must be vali
         {{
             "id": "uuid-string",
             "title": "Descriptive workflow title",
-            "mermaidDiagram": "flowchart TD\\n    A[Start] --> B{{Decision}}\\n    B --> |Yes| C[Process]\\n    B --> |No| D[\\"Handle Error (retry)\\"]\\n    C --> E[End]\\n    D --> E",
+            "nodes": [
+                {{ "id": "n1", "type": "terminal", "label": "Start", "variant": "start" }},
+                {{ "id": "n2", "type": "process", "label": "Step 1" }},
+                {{ "id": "n3", "type": "decision", "label": "Condition?" }},
+                {{ "id": "n4", "type": "process", "label": "Yes path" }},
+                {{ "id": "n5", "type": "process", "label": "No path" }},
+                {{ "id": "n6", "type": "terminal", "label": "End", "variant": "end" }}
+            ],
+            "edges": [
+                {{ "id": "e1", "source": "n1", "target": "n2" }},
+                {{ "id": "e2", "source": "n2", "target": "n3" }},
+                {{ "id": "e3", "source": "n3", "target": "n4", "label": "Yes" }},
+                {{ "id": "e4", "source": "n3", "target": "n5", "label": "No" }},
+                {{ "id": "e5", "source": "n4", "target": "n6" }},
+                {{ "id": "e6", "source": "n5", "target": "n6" }}
+            ],
             "sources": ["chunk_0", "chunk_1"]
         }}
     ]
 }}
+
+CRITICAL FORMAT RULES:
+1. workflows use nodes[] and edges[] - NOT mermaid strings
+2. Node types: "terminal" (start/end), "process" (steps), "decision" (branches)
+3. Terminal nodes need "variant": "start" or "end"
+4. Decision branches use edge labels like "Yes", "No"
+5. All node/edge IDs must be unique and properly referenced
 
 Remember:
 - meetingSummary should be bullet points (• prefix), not paragraphs

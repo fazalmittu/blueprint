@@ -9,10 +9,25 @@
 
 import { WebSocketServer, WebSocket } from "ws";
 
+interface WorkflowNode {
+  id: string;
+  type: "process" | "decision" | "terminal";
+  label: string;
+  variant?: "start" | "end";
+}
+
+interface WorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+}
+
 interface Workflow {
   id: string;
   title: string;
-  mermaidDiagram: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
   sources: string[];
 }
 
@@ -28,12 +43,12 @@ interface SocketEvent {
 
 // Simulated meeting data that evolves over time
 const summaryStages = [
-  "Meeting started. Participants are introducing themselves.",
-  "Meeting started. Participants are introducing themselves. Discussion topic: Q1 product roadmap.",
-  "Meeting started. Participants are introducing themselves. Discussion topic: Q1 product roadmap. Key priorities being identified.",
-  "Q1 roadmap meeting. Focus areas: mobile app launch, API improvements, customer dashboard redesign. Timeline discussion underway.",
-  "Q1 roadmap meeting. Focus areas: mobile app launch, API improvements, customer dashboard redesign. Mobile app targeted for February release. API v2 planned for March.",
-  "Q1 roadmap finalized. Mobile app: Feb 15. API v2: Mar 1. Dashboard redesign: Mar 15. Dependencies identified between teams.",
+  "• Meeting started\n• Participants are introducing themselves",
+  "• Meeting started\n• Participants are introducing themselves\n• Discussion topic: Q1 product roadmap",
+  "• Meeting started\n• Participants are introducing themselves\n• Discussion topic: Q1 product roadmap\n• Key priorities being identified",
+  "• Q1 roadmap meeting\n• Focus areas: mobile app launch, API improvements, customer dashboard redesign\n• Timeline discussion underway",
+  "• Q1 roadmap meeting\n• Focus areas: mobile app launch, API improvements, customer dashboard redesign\n• Mobile app targeted for February release\n• API v2 planned for March",
+  "• Q1 roadmap finalized\n• Mobile app: Feb 15\n• API v2: Mar 1\n• Dashboard redesign: Mar 15\n• Dependencies identified between teams",
 ];
 
 const workflowStages: Workflow[][] = [
@@ -42,8 +57,13 @@ const workflowStages: Workflow[][] = [
     {
       id: "wf-1",
       title: "Mobile App Launch",
-      mermaidDiagram: `flowchart TD
-    A[Design Finalization] --> B[Development]`,
+      nodes: [
+        { id: "n1", type: "terminal", label: "Design Finalization", variant: "start" },
+        { id: "n2", type: "process", label: "Development" },
+      ],
+      edges: [
+        { id: "e1", source: "n1", target: "n2" },
+      ],
       sources: ["chunk_0", "chunk_1"],
     },
   ],
@@ -51,9 +71,15 @@ const workflowStages: Workflow[][] = [
     {
       id: "wf-1",
       title: "Mobile App Launch",
-      mermaidDiagram: `flowchart TD
-    A[Design Finalization] --> B[Development]
-    B --> C[QA Testing]`,
+      nodes: [
+        { id: "n1", type: "terminal", label: "Design Finalization", variant: "start" },
+        { id: "n2", type: "process", label: "Development" },
+        { id: "n3", type: "terminal", label: "QA Testing", variant: "end" },
+      ],
+      edges: [
+        { id: "e1", source: "n1", target: "n2" },
+        { id: "e2", source: "n2", target: "n3" },
+      ],
       sources: ["chunk_0", "chunk_1", "chunk_2"],
     },
   ],
@@ -61,12 +87,20 @@ const workflowStages: Workflow[][] = [
     {
       id: "wf-1",
       title: "Mobile App Launch",
-      mermaidDiagram: `flowchart TD
-    A[Design Finalization] --> B[Development]
-    B --> C[QA Testing]
-    C --> D{Issues Found?}
-    D -- Yes --> B
-    D -- No --> E[Release]`,
+      nodes: [
+        { id: "n1", type: "terminal", label: "Design Finalization", variant: "start" },
+        { id: "n2", type: "process", label: "Development" },
+        { id: "n3", type: "process", label: "QA Testing" },
+        { id: "n4", type: "decision", label: "Issues Found?" },
+        { id: "n5", type: "terminal", label: "Release", variant: "end" },
+      ],
+      edges: [
+        { id: "e1", source: "n1", target: "n2" },
+        { id: "e2", source: "n2", target: "n3" },
+        { id: "e3", source: "n3", target: "n4" },
+        { id: "e4", source: "n4", target: "n2", label: "Yes" },
+        { id: "e5", source: "n4", target: "n5", label: "No" },
+      ],
       sources: ["chunk_0", "chunk_1", "chunk_2", "chunk_3"],
     },
   ],
@@ -74,20 +108,34 @@ const workflowStages: Workflow[][] = [
     {
       id: "wf-1",
       title: "Mobile App Launch",
-      mermaidDiagram: `flowchart TD
-    A[Design Finalization] --> B[Development]
-    B --> C[QA Testing]
-    C --> D{Issues Found?}
-    D -- Yes --> B
-    D -- No --> E[Release]`,
+      nodes: [
+        { id: "n1", type: "terminal", label: "Design Finalization", variant: "start" },
+        { id: "n2", type: "process", label: "Development" },
+        { id: "n3", type: "process", label: "QA Testing" },
+        { id: "n4", type: "decision", label: "Issues Found?" },
+        { id: "n5", type: "terminal", label: "Release", variant: "end" },
+      ],
+      edges: [
+        { id: "e1", source: "n1", target: "n2" },
+        { id: "e2", source: "n2", target: "n3" },
+        { id: "e3", source: "n3", target: "n4" },
+        { id: "e4", source: "n4", target: "n2", label: "Yes" },
+        { id: "e5", source: "n4", target: "n5", label: "No" },
+      ],
       sources: ["chunk_0", "chunk_1", "chunk_2", "chunk_3"],
     },
     {
       id: "wf-2",
       title: "API v2 Migration",
-      mermaidDiagram: `flowchart TD
-    A[API Design Review] --> B[Schema Updates]
-    B --> C[Endpoint Development]`,
+      nodes: [
+        { id: "n1", type: "terminal", label: "API Design Review", variant: "start" },
+        { id: "n2", type: "process", label: "Schema Updates" },
+        { id: "n3", type: "terminal", label: "Endpoint Development", variant: "end" },
+      ],
+      edges: [
+        { id: "e1", source: "n1", target: "n2" },
+        { id: "e2", source: "n2", target: "n3" },
+      ],
       sources: ["chunk_4", "chunk_5"],
     },
   ],
@@ -95,39 +143,69 @@ const workflowStages: Workflow[][] = [
     {
       id: "wf-1",
       title: "Mobile App Launch",
-      mermaidDiagram: `flowchart TD
-    A[Design Finalization] --> B[Development]
-    B --> C[QA Testing]
-    C --> D{Issues Found?}
-    D -- Yes --> B
-    D -- No --> E[Beta Release]
-    E --> F[User Feedback]
-    F --> G{Critical Issues?}
-    G -- Yes --> B
-    G -- No --> H[Production Release]`,
+      nodes: [
+        { id: "n1", type: "terminal", label: "Design Finalization", variant: "start" },
+        { id: "n2", type: "process", label: "Development" },
+        { id: "n3", type: "process", label: "QA Testing" },
+        { id: "n4", type: "decision", label: "Issues Found?" },
+        { id: "n5", type: "process", label: "Beta Release" },
+        { id: "n6", type: "process", label: "User Feedback" },
+        { id: "n7", type: "decision", label: "Critical Issues?" },
+        { id: "n8", type: "terminal", label: "Production Release", variant: "end" },
+      ],
+      edges: [
+        { id: "e1", source: "n1", target: "n2" },
+        { id: "e2", source: "n2", target: "n3" },
+        { id: "e3", source: "n3", target: "n4" },
+        { id: "e4", source: "n4", target: "n2", label: "Yes" },
+        { id: "e5", source: "n4", target: "n5", label: "No" },
+        { id: "e6", source: "n5", target: "n6" },
+        { id: "e7", source: "n6", target: "n7" },
+        { id: "e8", source: "n7", target: "n2", label: "Yes" },
+        { id: "e9", source: "n7", target: "n8", label: "No" },
+      ],
       sources: ["chunk_0", "chunk_1", "chunk_2", "chunk_3", "chunk_6"],
     },
     {
       id: "wf-2",
       title: "API v2 Migration",
-      mermaidDiagram: `flowchart TD
-    A[API Design Review] --> B[Schema Updates]
-    B --> C[Endpoint Development]
-    C --> D[Integration Testing]
-    D --> E[Documentation]
-    E --> F[Client SDK Updates]
-    F --> G[Staged Rollout]`,
+      nodes: [
+        { id: "n1", type: "terminal", label: "API Design Review", variant: "start" },
+        { id: "n2", type: "process", label: "Schema Updates" },
+        { id: "n3", type: "process", label: "Endpoint Development" },
+        { id: "n4", type: "process", label: "Integration Testing" },
+        { id: "n5", type: "process", label: "Documentation" },
+        { id: "n6", type: "process", label: "Client SDK Updates" },
+        { id: "n7", type: "terminal", label: "Staged Rollout", variant: "end" },
+      ],
+      edges: [
+        { id: "e1", source: "n1", target: "n2" },
+        { id: "e2", source: "n2", target: "n3" },
+        { id: "e3", source: "n3", target: "n4" },
+        { id: "e4", source: "n4", target: "n5" },
+        { id: "e5", source: "n5", target: "n6" },
+        { id: "e6", source: "n6", target: "n7" },
+      ],
       sources: ["chunk_4", "chunk_5", "chunk_7", "chunk_8"],
     },
     {
       id: "wf-3",
       title: "Dashboard Redesign",
-      mermaidDiagram: `flowchart TD
-    A[User Research] --> B[Wireframes]
-    B --> C[Visual Design]
-    C --> D[Component Library]
-    D --> E[Implementation]
-    E --> F[A/B Testing]`,
+      nodes: [
+        { id: "n1", type: "terminal", label: "User Research", variant: "start" },
+        { id: "n2", type: "process", label: "Wireframes" },
+        { id: "n3", type: "process", label: "Visual Design" },
+        { id: "n4", type: "process", label: "Component Library" },
+        { id: "n5", type: "process", label: "Implementation" },
+        { id: "n6", type: "terminal", label: "A/B Testing", variant: "end" },
+      ],
+      edges: [
+        { id: "e1", source: "n1", target: "n2" },
+        { id: "e2", source: "n2", target: "n3" },
+        { id: "e3", source: "n3", target: "n4" },
+        { id: "e4", source: "n4", target: "n5" },
+        { id: "e5", source: "n5", target: "n6" },
+      ],
       sources: ["chunk_9", "chunk_10"],
     },
   ],
@@ -203,4 +281,3 @@ const interval = setInterval(() => {
     console.log("  Press Ctrl+C to stop the server.\n");
   }
 }, 2000);
-
