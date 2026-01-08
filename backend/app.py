@@ -649,13 +649,26 @@ def process_transcript_chunks(meeting_id: str, chunks: list[str]):
             'currentState': new_state_version.model_dump(mode='json')
         })
     
+    # Get the final state to generate title
+    final_state = db.get_latest_state_version(meeting_id)
+    meeting = db.get_meeting(meeting_id)
+    
+    # Generate meeting title using LLM
+    meeting_summary = final_state.data.meetingSummary if final_state else ""
+    transcript = meeting.transcript if meeting else ""
+    title = generate_meeting_title(meeting_summary, transcript)
+    
+    # Update meeting with title
+    db.update_meeting_title(meeting_id, title)
+    
     # Update meeting status to finalized
     db.update_meeting_status(meeting_id, Status.finalized)
     
-    # Notify processing complete
+    # Notify processing complete with the generated title
     broadcast_to_meeting(meeting_id, {
         'type': 'processing_complete',
-        'totalChunks': total_chunks
+        'totalChunks': total_chunks,
+        'title': title
     })
     
     # Close SSE connections for this meeting
@@ -847,6 +860,50 @@ def process_with_llm(current_state_data: CurrentStateData, chunk: str, version: 
     updated_state.chunkText = chunk_text if chunk_text else chunk
     
     return updated_state
+
+
+def generate_meeting_title(meeting_summary: str, transcript: str = None) -> str:
+    """
+    Generate a concise title for the meeting using the LLM.
+    
+    Args:
+        meeting_summary: The processed meeting summary
+        transcript: Optional original transcript for additional context
+    
+    Returns:
+        A concise title for the meeting (max ~10 words)
+    """
+    # Use summary as primary source, fall back to transcript snippet
+    context = meeting_summary if meeting_summary else (transcript[:2000] if transcript else "")
+    
+    if not context:
+        return "Untitled Meeting"
+    
+    try:
+        response = client.chat.completions.create(
+            model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that generates concise, descriptive titles for meetings. Generate a title that captures the main topic or purpose of the meeting. The title should be 3-10 words, professional, and descriptive. Return ONLY the title, no quotes or extra formatting."
+                },
+                {
+                    "role": "user",
+                    "content": f"Generate a concise title for this meeting based on the following summary:\n\n{context}"
+                }
+            ],
+            temperature=0.3,
+            max_tokens=50
+        )
+        
+        title = response.choices[0].message.content.strip()
+        # Remove quotes if the model added them
+        title = title.strip('"\'')
+        return title if title else "Untitled Meeting"
+        
+    except Exception as e:
+        print(f"Error generating meeting title: {e}")
+        return "Untitled Meeting"
 
 
 def process_full_transcript(transcript: str, verbose: bool = True) -> CurrentStateData:

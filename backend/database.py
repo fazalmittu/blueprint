@@ -49,6 +49,7 @@ def init_db():
                 meeting_id TEXT PRIMARY KEY,
                 status TEXT NOT NULL,
                 org_id TEXT NOT NULL,
+                title TEXT,
                 transcript TEXT,
                 total_chunks INTEGER
             )
@@ -78,8 +79,8 @@ def init_db():
 
 
 def _migrate_add_transcript_columns(cursor):
-    """Add transcript and total_chunks columns if they don't exist."""
-    # Check if transcript column exists
+    """Add transcript, total_chunks, and title columns if they don't exist."""
+    # Check if columns exist
     cursor.execute("PRAGMA table_info(meetings)")
     columns = [col[1] for col in cursor.fetchall()]
     
@@ -88,6 +89,9 @@ def _migrate_add_transcript_columns(cursor):
     
     if 'total_chunks' not in columns:
         cursor.execute('ALTER TABLE meetings ADD COLUMN total_chunks INTEGER')
+    
+    if 'title' not in columns:
+        cursor.execute('ALTER TABLE meetings ADD COLUMN title TEXT')
 
 
 # ==================== MEETING OPERATIONS ====================
@@ -97,12 +101,13 @@ def create_meeting(meeting: Meeting) -> None:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            '''INSERT INTO meetings (meeting_id, status, org_id, transcript, total_chunks) 
-               VALUES (?, ?, ?, ?, ?)''',
+            '''INSERT INTO meetings (meeting_id, status, org_id, title, transcript, total_chunks) 
+               VALUES (?, ?, ?, ?, ?, ?)''',
             (
                 meeting.meetingId, 
                 meeting.status.value, 
                 meeting.orgId,
+                meeting.title,
                 meeting.transcript,
                 meeting.totalChunks
             )
@@ -114,7 +119,7 @@ def get_meeting(meeting_id: str) -> Optional[Meeting]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            'SELECT meeting_id, status, org_id, transcript, total_chunks FROM meetings WHERE meeting_id = ?',
+            'SELECT meeting_id, status, org_id, title, transcript, total_chunks FROM meetings WHERE meeting_id = ?',
             (meeting_id,)
         )
         row = cursor.fetchone()
@@ -126,6 +131,7 @@ def get_meeting(meeting_id: str) -> Optional[Meeting]:
             meetingId=row['meeting_id'],
             status=Status(row['status']),
             orgId=row['org_id'],
+            title=row['title'],
             transcript=row['transcript'],
             totalChunks=row['total_chunks']
         )
@@ -138,6 +144,17 @@ def update_meeting_status(meeting_id: str, status: Status) -> bool:
         cursor.execute(
             'UPDATE meetings SET status = ? WHERE meeting_id = ?',
             (status.value, meeting_id)
+        )
+        return cursor.rowcount > 0
+
+
+def update_meeting_title(meeting_id: str, title: str) -> bool:
+    """Update a meeting's title."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE meetings SET title = ? WHERE meeting_id = ?',
+            (title, meeting_id)
         )
         return cursor.rowcount > 0
 
@@ -167,7 +184,7 @@ def get_meetings_by_org(org_id: str) -> list[Meeting]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            'SELECT meeting_id, status, org_id, transcript, total_chunks FROM meetings WHERE org_id = ? ORDER BY meeting_id',
+            'SELECT meeting_id, status, org_id, title, transcript, total_chunks FROM meetings WHERE org_id = ? ORDER BY meeting_id',
             (org_id,)
         )
         rows = cursor.fetchall()
@@ -178,6 +195,7 @@ def get_meetings_by_org(org_id: str) -> list[Meeting]:
                 meetingId=row['meeting_id'],
                 status=Status(row['status']),
                 orgId=row['org_id'],
+                title=row['title'],
                 transcript=row['transcript'],
                 totalChunks=row['total_chunks']
             )

@@ -10,6 +10,10 @@ export interface Meeting {
   status: "active" | "finalized";
   orgId: string;
   /**
+   * LLM-generated title for the meeting based on transcript content
+   */
+  title?: string;
+  /**
    * The full transcript text uploaded by user
    */
   transcript?: string;
