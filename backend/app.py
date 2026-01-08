@@ -281,6 +281,7 @@ def register_routes(app):
         from queue import Queue
         
         def generate():
+            from queue import Empty
             # Create a queue for this connection
             q = Queue()
             
@@ -301,15 +302,21 @@ def register_routes(app):
                         if message is None:
                             break
                         yield f"data: {json.dumps(message)}\n\n"
-                    except:
-                        # Send keepalive
+                    except Empty:
+                        # Send keepalive on timeout
                         yield f"data: {json.dumps({'type': 'keepalive'})}\n\n"
+            except GeneratorExit:
+                # Client disconnected - exit gracefully
+                pass
             finally:
                 # Cleanup
                 if meeting_id in sse_connections:
-                    sse_connections[meeting_id].remove(q)
-                    if not sse_connections[meeting_id]:
-                        del sse_connections[meeting_id]
+                    try:
+                        sse_connections[meeting_id].remove(q)
+                        if not sse_connections[meeting_id]:
+                            del sse_connections[meeting_id]
+                    except (ValueError, KeyError):
+                        pass
         
         return app.response_class(
             generate(),
@@ -716,7 +723,7 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
     # Prepare current state for prompt (exclude chunk metadata)
     state_for_prompt = {
         'meetingSummary': current_state_data.meetingSummary,
-        'workflows': [w.model_dump() for w in current_state_data.workflows] if current_state_data.workflows else []
+        'workflows': [w.model_dump(mode='json') for w in current_state_data.workflows] if current_state_data.workflows else []
     }
 
     user_prompt = get_chunk_processing_user_prompt(state_for_prompt, chunk, chunk_index)
@@ -732,7 +739,17 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
             response_format={"type": "json_object"}
         )
         
-        result = json.loads(response.choices[0].message.content)
+        raw_content = response.choices[0].message.content
+        
+        # Try to parse JSON, fixing common LLM issues if needed
+        import re
+        try:
+            result = json.loads(raw_content)
+        except json.JSONDecodeError as e:
+            # Fix invalid unicode escapes (e.g., \uXXXX where XXXX isn't valid hex)
+            # Remove any \u that isn't followed by exactly 4 hex digits
+            fixed_content = re.sub(r'\\u(?![0-9a-fA-F]{4})[0-9a-fA-F]{0,3}', '', raw_content)
+            result = json.loads(fixed_content)
         
         # Parse workflows into Workflow models with nodes/edges
         workflows = []

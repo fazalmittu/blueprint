@@ -349,6 +349,13 @@ export function Meeting() {
   const [processingChunkIndex, setProcessingChunkIndex] = useState<number | null>(null);
   
   const eventSourceRef = useRef<EventSource | null>(null);
+  
+  // Cache for version data to avoid redundant fetches
+  const versionCacheRef = useRef<Map<number, MeetingResponse>>(new Map());
+  // AbortController to cancel pending requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // Debounce timer
+  const debounceTimerRef = useRef<number | null>(null);
 
   // Load initial data
   useEffect(() => {
@@ -362,6 +369,9 @@ export function Meeting() {
         ]);
         setData(meetingRes);
         setVersions(versionsRes.versions);
+        
+        // Cache the initial version
+        versionCacheRef.current.set(meetingRes.currentState.version, meetingRes);
         
         // Check if meeting is being processed
         if (meetingRes.meeting.status === "active") {
@@ -380,6 +390,12 @@ export function Meeting() {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
   }, [meetingId]);
 
@@ -396,10 +412,17 @@ export function Meeting() {
             
           case "chunk_processed":
             if (message.currentState) {
-              setData(prev => prev ? {
-                ...prev,
-                currentState: message.currentState!
-              } : null);
+              // Update current state with the new data
+              setData(prev => {
+                if (!prev) return null;
+                const updated = {
+                  ...prev,
+                  currentState: message.currentState!,
+                };
+                // Cache this version
+                versionCacheRef.current.set(message.currentState!.version, updated);
+                return updated;
+              });
             }
             if (message.chunkIndex !== undefined) {
               setProcessingChunkIndex(message.chunkIndex);
@@ -444,15 +467,40 @@ export function Meeting() {
     );
   }, [meetingId]);
 
-  const handleVersionChange = useCallback(async (version: number) => {
+  const handleVersionChange = useCallback((version: number) => {
     if (!meetingId) return;
     
-    try {
-      const res = await getMeeting(meetingId, version);
-      setData(res);
-    } catch (e) {
-      console.error("Failed to load version:", e);
+    // Clear any pending debounce
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
+    
+    // Check cache first
+    const cached = versionCacheRef.current.get(version);
+    if (cached) {
+      setData(cached);
+      return;
+    }
+    
+    // Debounce the actual fetch (150ms)
+    debounceTimerRef.current = window.setTimeout(async () => {
+      // Cancel any pending request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+      
+      try {
+        const res = await getMeeting(meetingId, version);
+        // Cache the result
+        versionCacheRef.current.set(version, res);
+        setData(res);
+      } catch (e) {
+        // Ignore abort errors
+        if (e instanceof Error && e.name === 'AbortError') return;
+        console.error("Failed to load version:", e);
+      }
+    }, 150);
   }, [meetingId]);
 
   const handleWorkflowDeleted = useCallback((workflowId: string) => {
