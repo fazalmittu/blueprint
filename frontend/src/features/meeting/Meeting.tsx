@@ -166,11 +166,6 @@ function MeetingContent({
     [meeting.meetingId, onWorkflowDeleted]
   );
 
-  // Handle workflow click from notes view - switch to canvas tab
-  const handleWorkflowClick = useCallback((_workflowId: string) => {
-    setActiveTab("canvas");
-  }, []);
-
   // Handle summary update
   const [localSummary, setLocalSummary] = useState(state.meetingSummary);
   
@@ -208,10 +203,8 @@ function MeetingContent({
       content: (
         <MeetingNotes
           summary={localSummary}
-          workflows={state.workflows}
           isProcessing={isProcessing}
           processingChunkIndex={processingChunkIndex}
-          onWorkflowClick={handleWorkflowClick}
           onSummaryChange={handleSummaryChange}
           isEditable={isEditable}
         />
