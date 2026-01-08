@@ -6,6 +6,7 @@ import {
   subscribeMeetingUpdates,
   updateWorkflow,
   deleteWorkflow,
+  updateMeetingSummary,
   type MeetingResponse, 
   type VersionInfo,
   type SSEMessage,
@@ -170,6 +171,27 @@ function MeetingContent({
     setActiveTab("canvas");
   }, []);
 
+  // Handle summary update
+  const [localSummary, setLocalSummary] = useState(state.meetingSummary);
+  
+  // Sync local summary when state changes
+  useEffect(() => {
+    setLocalSummary(state.meetingSummary);
+  }, [state.meetingSummary]);
+
+  const handleSummaryChange = useCallback(
+    async (newSummary: string) => {
+      try {
+        await updateMeetingSummary(meeting.meetingId, newSummary);
+        setLocalSummary(newSummary);
+      } catch (error) {
+        console.error("Failed to update summary:", error);
+        throw error; // Re-throw so MeetingNotes can handle it
+      }
+    },
+    [meeting.meetingId]
+  );
+
   // Tab definitions
   const tabs = [
     {
@@ -185,11 +207,13 @@ function MeetingContent({
       ),
       content: (
         <MeetingNotes
-          summary={state.meetingSummary}
+          summary={localSummary}
           workflows={state.workflows}
           isProcessing={isProcessing}
           processingChunkIndex={processingChunkIndex}
           onWorkflowClick={handleWorkflowClick}
+          onSummaryChange={handleSummaryChange}
+          isEditable={isEditable}
         />
       ),
     },

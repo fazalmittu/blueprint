@@ -537,6 +537,44 @@ def register_routes(app):
             'deletedWorkflowId': workflow_id
         }), 200
 
+    # ==================== MEETING SUMMARY ENDPOINT ====================
+
+    @app.route('/meeting/<meeting_id>/summary', methods=['PATCH'])
+    def update_meeting_summary(meeting_id: str):
+        """
+        Update the meeting summary for a finalized meeting.
+        
+        Request Body:
+            meetingSummary (str): The new meeting summary text
+        
+        Returns:
+            Success status and updated summary
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        if meeting.status != Status.finalized:
+            return jsonify({'error': 'Summary can only be updated for finalized meetings'}), 400
+        
+        data = request.get_json()
+        if not data or 'meetingSummary' not in data:
+            return jsonify({'error': 'meetingSummary is required'}), 400
+        
+        new_summary = data['meetingSummary']
+        if not isinstance(new_summary, str):
+            return jsonify({'error': 'meetingSummary must be a string'}), 400
+        
+        # Update in database
+        updated_state = db.update_latest_state_summary(meeting_id, new_summary)
+        if not updated_state:
+            return jsonify({'error': 'Failed to update summary'}), 500
+        
+        return jsonify({
+            'success': True,
+            'meetingSummary': new_summary
+        }), 200
+
     # ==================== PROCESS ENDPOINT ====================
 
     @app.route('/process', methods=['POST'])
