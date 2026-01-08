@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, type ReactNode } from "react";
+import { useState, useCallback, useRef, type ReactNode, useEffect } from "react";
 
 interface Tab {
   id: string;
@@ -10,9 +10,35 @@ interface Tab {
 interface SplitPanelProps {
   tabs: Tab[];
   defaultTabId?: string;
+  onTabChange?: (tabId: string) => void;
+  activeTabId?: string;
 }
 
-type LayoutMode = "single" | "split-horizontal";
+type LayoutMode = "single" | "split-vertical";
+
+// Inject keyframes for pulse animation
+const pulseKeyframes = `
+@keyframes dropZonePulse {
+  0%, 100% {
+    background: rgba(59, 130, 246, 0.05);
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.8);
+  }
+}
+`;
+
+// Inject styles once
+let stylesInjected = false;
+function injectStyles() {
+  if (stylesInjected) return;
+  const style = document.createElement("style");
+  style.textContent = pulseKeyframes;
+  document.head.appendChild(style);
+  stylesInjected = true;
+}
 
 interface DragState {
   tabId: string;
@@ -22,10 +48,22 @@ interface DragState {
 
 /**
  * A panel system with tabs that can be split by dragging.
- * Drag a tab down to split the view horizontally.
+ * Drag a tab right to split the view side-by-side.
  */
-export function SplitPanel({ tabs, defaultTabId }: SplitPanelProps) {
-  const [activeTab, setActiveTab] = useState(defaultTabId || tabs[0]?.id);
+export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: SplitPanelProps) {
+  const [internalActiveTab, setInternalActiveTab] = useState(defaultTabId || tabs[0]?.id);
+  
+  // Inject pulse animation styles
+  useEffect(() => {
+    injectStyles();
+  }, []);
+  
+  // Use controlled or uncontrolled pattern
+  const activeTab = activeTabId !== undefined ? activeTabId : internalActiveTab;
+  const setActiveTab = (tabId: string) => {
+    setInternalActiveTab(tabId);
+    onTabChange?.(tabId);
+  };
   const [layout, setLayout] = useState<LayoutMode>("single");
   const [splitTabs, setSplitTabs] = useState<[string, string] | null>(null);
   const [splitRatio, setSplitRatio] = useState(0.5);
@@ -33,6 +71,7 @@ export function SplitPanel({ tabs, defaultTabId }: SplitPanelProps) {
   const [showDropZone, setShowDropZone] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
   const handleTabClick = useCallback((tabId: string) => {
     if (layout === "single") {
@@ -41,7 +80,7 @@ export function SplitPanel({ tabs, defaultTabId }: SplitPanelProps) {
   }, [layout]);
 
   const handleTabMouseDown = useCallback((e: React.MouseEvent, tabId: string) => {
-    if (layout === "split-horizontal") return; // Can't drag when already split
+    if (layout === "split-vertical") return; // Can't drag when already split
     
     setDragState({
       tabId,
@@ -54,9 +93,10 @@ export function SplitPanel({ tabs, defaultTabId }: SplitPanelProps) {
     if (!dragState) return;
     
     const deltaY = e.clientY - dragState.startY;
+    const deltaX = e.clientX - dragState.startX;
     
-    // Show drop zone when dragging down significantly
-    if (deltaY > 50) {
+    // Show drop zone when dragging right significantly
+    if (deltaX > 50 || deltaY > 50) {
       setShowDropZone(true);
     } else {
       setShowDropZone(false);
@@ -67,40 +107,49 @@ export function SplitPanel({ tabs, defaultTabId }: SplitPanelProps) {
     if (!dragState) return;
     
     const deltaY = e.clientY - dragState.startY;
+    const deltaX = e.clientX - dragState.startX;
     
-    // If dragged down enough and we have another tab, split
-    if (deltaY > 50 && tabs.length >= 2) {
+    // If dragged enough and we have at least 2 tabs, split
+    if ((deltaX > 50 || deltaY > 50) && tabs.length >= 2) {
+      // Get the other tab (not the one being dragged)
       const otherTab = tabs.find(t => t.id !== dragState.tabId);
       if (otherTab) {
-        setLayout("split-horizontal");
-        setSplitTabs([activeTab || tabs[0].id, dragState.tabId]);
+        setLayout("split-vertical");
+        // Left panel gets the OTHER tab (not being dragged), right panel gets the dragged tab
+        setSplitTabs([otherTab.id, dragState.tabId]);
+        // Reset to exactly 50/50 split
+        setSplitRatio(0.5);
       }
     }
     
     setDragState(null);
     setShowDropZone(false);
-  }, [dragState, tabs, activeTab]);
+  }, [dragState, tabs]);
 
-  const handleCloseSplit = useCallback(() => {
+  const handleClosePane = useCallback((paneIndex: 0 | 1) => {
+    if (!splitTabs) return;
+    
+    // Keep the other pane's tab as the active tab
+    const remainingTab = splitTabs[paneIndex === 0 ? 1 : 0];
     setLayout("single");
     setSplitTabs(null);
-    setActiveTab(tabs[0]?.id);
-  }, [tabs]);
+    setActiveTab(remainingTab);
+  }, [splitTabs]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
     
-    const startY = e.clientY;
+    const startX = e.clientX;
     const startRatio = splitRatio;
     const container = containerRef.current;
     if (!container) return;
     
-    const containerHeight = container.getBoundingClientRect().height;
+    const containerWidth = container.getBoundingClientRect().width;
     
     const handleMove = (moveEvent: MouseEvent) => {
-      const delta = moveEvent.clientY - startY;
-      const newRatio = Math.max(0.2, Math.min(0.8, startRatio + delta / containerHeight));
+      const delta = moveEvent.clientX - startX;
+      const newRatio = Math.max(0.2, Math.min(0.8, startRatio + delta / containerWidth));
       setSplitRatio(newRatio);
     };
     
@@ -116,6 +165,21 @@ export function SplitPanel({ tabs, defaultTabId }: SplitPanelProps) {
 
   const getTabContent = (tabId: string) => {
     return tabs.find(t => t.id === tabId)?.content || null;
+  };
+
+  const getTabLabel = (tabId: string) => {
+    return tabs.find(t => t.id === tabId)?.label || "";
+  };
+
+  const getTabIcon = (tabId: string) => {
+    return tabs.find(t => t.id === tabId)?.icon || null;
+  };
+
+  const isTabActive = (tabId: string) => {
+    if (layout === "single") {
+      return activeTab === tabId;
+    }
+    return splitTabs?.includes(tabId) || false;
   };
 
   return (
@@ -149,85 +213,132 @@ export function SplitPanel({ tabs, defaultTabId }: SplitPanelProps) {
           flexShrink: 0,
         }}
       >
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => handleTabClick(tab.id)}
-            onMouseDown={(e) => handleTabMouseDown(e, tab.id)}
-            style={{
-              padding: "var(--space-sm) var(--space-md)",
-              border: "none",
-              borderRadius: "var(--radius-md)",
-              background:
-                (layout === "single" && activeTab === tab.id) ||
-                (layout === "split-horizontal" && splitTabs?.includes(tab.id))
+        {tabs.map((tab) => {
+          const active = isTabActive(tab.id);
+          const hovered = hoveredTab === tab.id;
+          
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleTabClick(tab.id)}
+              onMouseDown={(e) => handleTabMouseDown(e, tab.id)}
+              onMouseEnter={() => setHoveredTab(tab.id)}
+              onMouseLeave={() => setHoveredTab(null)}
+              style={{
+                padding: "var(--space-sm) var(--space-md)",
+                border: "none",
+                borderRadius: "var(--radius-md)",
+                background: active
                   ? "var(--accent-subtle)"
-                  : "transparent",
-              color:
-                (layout === "single" && activeTab === tab.id) ||
-                (layout === "split-horizontal" && splitTabs?.includes(tab.id))
+                  : hovered
+                    ? "rgba(59, 130, 246, 0.1)"
+                    : "transparent",
+                color: active || hovered
                   ? "var(--accent)"
                   : "var(--text-secondary)",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              cursor: layout === "single" ? "grab" : "default",
-              display: "flex",
-              alignItems: "center",
-              gap: "var(--space-xs)",
-              transition: "all var(--transition-fast)",
-              userSelect: "none",
-            }}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
-
-        {/* Split indicator */}
-        {layout === "split-horizontal" && (
-          <button
-            onClick={handleCloseSplit}
-            style={{
-              marginLeft: "auto",
-              padding: "var(--space-xs) var(--space-sm)",
-              border: "none",
-              borderRadius: "var(--radius-sm)",
-              background: "var(--bg-tertiary)",
-              color: "var(--text-muted)",
-              fontSize: "0.75rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "var(--space-xs)",
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-            Close split
-          </button>
-        )}
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                cursor: layout === "single" ? "grab" : "default",
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-xs)",
+                transition: "all var(--transition-fast)",
+                userSelect: "none",
+              }}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Content area */}
-      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex" }}>
         {layout === "single" ? (
-          // Single tab view
-          <div style={{ height: "100%", overflow: "auto" }}>
+          // Single tab view - shrink when drop zone is shown
+          <div
+            style={{
+              height: "100%",
+              width: showDropZone ? "50%" : "100%",
+              overflow: "auto",
+              transition: "width 0.2s ease-out",
+            }}
+          >
             {getTabContent(activeTab || tabs[0]?.id)}
           </div>
         ) : (
-          // Split view
+          // Split view - side by side
           <>
-            {/* Top panel */}
+            {/* Left panel */}
             <div
               style={{
-                height: `${splitRatio * 100}%`,
-                overflow: "auto",
-                borderBottom: "1px solid var(--border-subtle)",
+                width: `${splitRatio * 100}%`,
+                height: "100%",
+                overflow: "hidden",
+                borderRight: "1px solid var(--border-subtle)",
+                display: "flex",
+                flexDirection: "column",
               }}
             >
-              {splitTabs && getTabContent(splitTabs[0])}
+              {/* Left panel header */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "var(--space-xs) var(--space-sm)",
+                  borderBottom: "1px solid var(--border-subtle)",
+                  background: "var(--bg-tertiary)",
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-xs)",
+                    fontSize: "0.75rem",
+                    fontWeight: 500,
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  {splitTabs && getTabIcon(splitTabs[0])}
+                  {splitTabs && getTabLabel(splitTabs[0])}
+                </div>
+                <button
+                  onClick={() => handleClosePane(0)}
+                  style={{
+                    padding: "2px",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    background: "transparent",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all var(--transition-fast)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-secondary)";
+                    e.currentTarget.style.color = "var(--text-primary)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                    e.currentTarget.style.color = "var(--text-muted)";
+                  }}
+                  title="Close pane"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {/* Left panel content */}
+              <div style={{ flex: 1, overflow: "auto" }}>
+                {splitTabs && getTabContent(splitTabs[0])}
+              </div>
             </div>
 
             {/* Resize handle */}
@@ -235,11 +346,11 @@ export function SplitPanel({ tabs, defaultTabId }: SplitPanelProps) {
               onMouseDown={handleResizeStart}
               style={{
                 position: "absolute",
-                left: 0,
-                right: 0,
-                top: `calc(${splitRatio * 100}% - 3px)`,
-                height: 6,
-                cursor: "row-resize",
+                top: 0,
+                bottom: 0,
+                left: `calc(${splitRatio * 100}% - 3px)`,
+                width: 6,
+                cursor: "col-resize",
                 background: isResizing ? "var(--accent)" : "transparent",
                 zIndex: 10,
                 display: "flex",
@@ -249,58 +360,136 @@ export function SplitPanel({ tabs, defaultTabId }: SplitPanelProps) {
             >
               <div
                 style={{
-                  width: 40,
-                  height: 4,
+                  width: 4,
+                  height: 40,
                   borderRadius: 2,
                   background: isResizing ? "var(--accent)" : "var(--border-subtle)",
                 }}
               />
             </div>
 
-            {/* Bottom panel */}
+            {/* Right panel */}
             <div
               style={{
-                height: `${(1 - splitRatio) * 100}%`,
-                overflow: "auto",
+                width: `${(1 - splitRatio) * 100}%`,
+                height: "100%",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
               }}
             >
-              {splitTabs && getTabContent(splitTabs[1])}
+              {/* Right panel header */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "var(--space-xs) var(--space-sm)",
+                  borderBottom: "1px solid var(--border-subtle)",
+                  background: "var(--bg-tertiary)",
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-xs)",
+                    fontSize: "0.75rem",
+                    fontWeight: 500,
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  {splitTabs && getTabIcon(splitTabs[1])}
+                  {splitTabs && getTabLabel(splitTabs[1])}
+                </div>
+                <button
+                  onClick={() => handleClosePane(1)}
+                  style={{
+                    padding: "2px",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    background: "transparent",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all var(--transition-fast)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-secondary)";
+                    e.currentTarget.style.color = "var(--text-primary)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                    e.currentTarget.style.color = "var(--text-muted)";
+                  }}
+                  title="Close pane"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {/* Right panel content */}
+              <div style={{ flex: 1, overflow: "auto" }}>
+                {splitTabs && getTabContent(splitTabs[1])}
+              </div>
             </div>
           </>
         )}
 
-        {/* Drop zone indicator */}
+        {/* Drop zone indicator - shows as empty space on the right */}
         {showDropZone && (
           <div
             style={{
-              position: "absolute",
-              left: "10%",
-              right: "10%",
-              bottom: "10%",
-              height: "40%",
-              border: "2px dashed var(--accent)",
-              borderRadius: "var(--radius-lg)",
-              background: "var(--accent-subtle)",
+              width: "50%",
+              height: "100%",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              pointerEvents: "none",
-              opacity: 0.9,
+              borderLeft: "2px dashed rgba(59, 130, 246, 0.6)",
+              flexShrink: 0,
+              animation: "dropZonePulse 1.2s ease-in-out infinite",
             }}
           >
-            <span
+            <div
               style={{
-                fontSize: "0.875rem",
-                fontWeight: 500,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "var(--space-sm)",
                 color: "var(--accent)",
               }}
             >
-              Drop here to split view
-            </span>
+              <svg 
+                width="40" 
+                height="40" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="1.5"
+                style={{
+                  opacity: 0.8,
+                }}
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M12 3v18" />
+              </svg>
+              <span
+                style={{
+                  fontSize: "0.9rem",
+                  fontWeight: 600,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                Drop to split view
+              </span>
+            </div>
           </div>
         )}
       </div>
     </div>
   );
 }
-

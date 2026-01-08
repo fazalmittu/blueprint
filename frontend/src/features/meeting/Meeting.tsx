@@ -116,6 +116,9 @@ function MeetingContent({
   // Check if meeting is editable (finalized and not processing)
   const isEditable = meeting.status === "finalized" && !isProcessing;
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState("notes");
+
   // Handle workflow update from canvas
   const handleWorkflowUpdate = useCallback(
     async (workflowId: string, nodes: Node[], edges: Edge[]) => {
@@ -163,9 +166,8 @@ function MeetingContent({
   );
 
   // Handle workflow click from notes view - switch to canvas tab
-  const handleWorkflowClick = useCallback((workflowId: string) => {
-    // For now, just log - in future could scroll to workflow
-    console.log("Navigate to workflow:", workflowId);
+  const handleWorkflowClick = useCallback((_workflowId: string) => {
+    setActiveTab("canvas");
   }, []);
 
   // Tab definitions
@@ -313,7 +315,12 @@ function MeetingContent({
 
         {/* Tab content */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <SplitPanel tabs={tabs} defaultTabId="notes" />
+          <SplitPanel 
+            tabs={tabs} 
+            defaultTabId="notes" 
+            activeTabId={activeTab}
+            onTabChange={setActiveTab}
+          />
         </div>
       </div>
 

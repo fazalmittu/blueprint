@@ -11,8 +11,8 @@ export function Toolbar({ onAddText, onAddShape }: ToolbarProps) {
     <div
       onClick={(e) => e.stopPropagation()}
       style={{
-        position: "fixed",
-        top: "var(--toolbar-top)",
+        position: "absolute",
+        top: 16,
         left: "50%",
         transform: "translateX(-50%)",
         display: "flex",
