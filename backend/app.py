@@ -693,13 +693,13 @@ def get_initial_state() -> CurrentStateData:
 
 def chunk_transcript(transcript: str) -> list[str]:
     """
-    Breaks a transcript string into chunks of 2-3 sentences.
+    Breaks a transcript string into chunks of 10 sentences.
     
     Args:
         transcript: The full transcript string to chunk
     
     Returns:
-        List of chunks, each containing 2-3 sentences
+        List of chunks, each containing 10 sentences (or fewer for the last chunk)
     """
     # Split by sentence-ending punctuation while keeping the punctuation
     # This regex splits on . ! or ? followed by whitespace or end of string
@@ -710,22 +710,10 @@ def chunk_transcript(transcript: str) -> list[str]:
     sentences = [s.strip() for s in sentences if s.strip()]
     
     chunks = []
-    i = 0
     
-    while i < len(sentences):
-        # Take 2-3 sentences per chunk
-        # Prefer 3 sentences, but take 2 if that's what's left
-        if i + 3 <= len(sentences):
-            chunk = ' '.join(sentences[i:i+3])
-            i += 3
-        elif i + 2 <= len(sentences):
-            chunk = ' '.join(sentences[i:i+2])
-            i += 2
-        else:
-            # Only one sentence left
-            chunk = sentences[i]
-            i += 1
-        
+    # Take 10 sentences per chunk
+    for i in range(0, len(sentences), 10):
+        chunk = ' '.join(sentences[i:i+10])
         chunks.append(chunk)
     
     return chunks
@@ -760,7 +748,8 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
 
     WORKFLOW RULES:
     - Be VERY conservative about creating new workflows - only create when absolutely necessary
-    - Prefer updating/expanding existing workflows over creating new ones
+    - If you do decide to create a new workflow, make sure add a new entry in the workflows list. This is VERY important for organization purposes.
+    - Prefer updating/expanding existing workflows over creating new ones, unless the transcript explicitly mentions to create anew workflow.
     - If two workflows cover similar or overlapping processes, MERGE them into one
     - Only create a new workflow if the chunk describes a genuinely distinct, separate process
     - Each workflow must have a unique id (UUID format), descriptive title, valid Mermaid diagram, and sources array
@@ -867,21 +856,11 @@ def pass_chunk(chunk: str, current_state_data: CurrentStateData, chunk_index: in
         ]
     }}
 
-    CRITICAL MERMAID RULES - FOLLOW EXACTLY:
-    1. Start with "flowchart TD" (no code fences, no ```mermaid)
-    2. Node IDs = alphanumeric only (A, Step1, userInput) - NO spaces/hyphens in IDs
-    3. Labels in brackets: A[Label Here] NOT [Label Here]
-    4. Special chars in labels? Use quotes: A["Has (parens) or: colons"]
-    5. Edge labels in pipes: A --> |Yes| B
-    6. One connection per line
-    7. Decision nodes use curly braces: B{{Is Valid?}}
-
     Remember:
     - meetingSummary should be bullet points (• prefix), not paragraphs
     - Only create new workflows when absolutely necessary, prefer updating existing ones
     - Merge similar/overlapping workflows
     - If this chunk is instructional/critique content, only modify workflows, not the summary
-    - VALIDATE your mermaid syntax before returning!
 
     Return ONLY the JSON object, no additional text."""
 
