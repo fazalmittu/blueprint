@@ -7,6 +7,8 @@ import {
   updateWorkflow,
   deleteWorkflow,
   updateMeetingSummary,
+  updateMeetingTitle,
+  generateMeetingDocument,
   type MeetingResponse, 
   type VersionInfo,
   type SSEMessage,
@@ -178,11 +180,17 @@ function MeetingContent({
 
   // Handle summary update
   const [localSummary, setLocalSummary] = useState(state.meetingSummary);
+  const [localTitle, setLocalTitle] = useState(meeting.title || "Untitled Meeting");
   
   // Sync local summary when state changes
   useEffect(() => {
     setLocalSummary(state.meetingSummary);
   }, [state.meetingSummary]);
+
+  // Sync local title when meeting changes
+  useEffect(() => {
+    setLocalTitle(meeting.title || "Untitled Meeting");
+  }, [meeting.title]);
 
   const handleSummaryChange = useCallback(
     async (newSummary: string) => {
@@ -196,6 +204,29 @@ function MeetingContent({
     },
     [meeting.meetingId]
   );
+
+  const handleTitleChange = useCallback(
+    async (newTitle: string) => {
+      try {
+        await updateMeetingTitle(meeting.meetingId, newTitle);
+        setLocalTitle(newTitle);
+      } catch (error) {
+        console.error("Failed to update title:", error);
+        throw error;
+      }
+    },
+    [meeting.meetingId]
+  );
+
+  const handleGenerateDocument = useCallback(async () => {
+    try {
+      const response = await generateMeetingDocument(meeting.meetingId);
+      setLocalSummary(response.document);
+    } catch (error) {
+      console.error("Failed to generate document:", error);
+      throw error;
+    }
+  }, [meeting.meetingId]);
 
   // Tab definitions
   const tabs = [
@@ -212,10 +243,13 @@ function MeetingContent({
       ),
       content: (
         <MeetingNotes
+          title={localTitle}
           summary={localSummary}
           isProcessing={isProcessing}
           processingChunkIndex={processingChunkIndex}
           onSummaryChange={handleSummaryChange}
+          onTitleChange={handleTitleChange}
+          onGenerateDocument={handleGenerateDocument}
           isEditable={isEditable}
         />
       ),

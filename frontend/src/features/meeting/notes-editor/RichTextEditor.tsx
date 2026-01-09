@@ -256,10 +256,10 @@ function parseMarkdownToHTML(markdown: string): string {
       continue;
     }
     
-    // Check for list items
-    const bulletMatch = line.match(/^[\-\*]\s+(.*)$/);
-    const numberedMatch = line.match(/^\d+\.\s+(.*)$/);
-    const taskMatch = line.match(/^[\-\*]\s+\[([ xX])\]\s+(.*)$/);
+    // Check for list items (support -, *, and • bullet styles, with optional leading whitespace)
+    const bulletMatch = line.match(/^\s*[\-\*•]\s+(.*)$/);
+    const numberedMatch = line.match(/^\s*\d+\.\s+(.*)$/);
+    const taskMatch = line.match(/^\s*[\-\*•]\s+\[([ xX])\]\s+(.*)$/);
     
     if (taskMatch) {
       // Close any non-task list

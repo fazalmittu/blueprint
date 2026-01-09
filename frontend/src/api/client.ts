@@ -310,6 +310,61 @@ export async function updateMeetingSummary(
   return res.json();
 }
 
+// ==================== MEETING TITLE ENDPOINT ====================
+
+export interface UpdateTitleResponse {
+  success: boolean;
+  title: string;
+}
+
+/**
+ * Update the meeting title.
+ */
+export async function updateMeetingTitle(
+  meetingId: string,
+  title: string
+): Promise<UpdateTitleResponse> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/title`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Failed to update title" }));
+    throw new Error(error.error || "Failed to update title");
+  }
+  return res.json();
+}
+
+// ==================== GENERATE DOCUMENT ENDPOINT ====================
+
+export interface GenerateDocumentResponse {
+  success: boolean;
+  document: string;
+}
+
+/**
+ * Generate a professional document from meeting data.
+ */
+export async function generateMeetingDocument(
+  meetingId: string
+): Promise<GenerateDocumentResponse> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/generate-document`,
+    {
+      method: "POST",
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Failed to generate document" }));
+    throw new Error(error.error || "Failed to generate document");
+  }
+  return res.json();
+}
+
 // ==================== CHAT ENDPOINT ====================
 
 export interface ChatMessage {

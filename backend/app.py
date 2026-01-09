@@ -575,6 +575,82 @@ def register_routes(app):
             'meetingSummary': new_summary
         }), 200
 
+    # ==================== MEETING TITLE ENDPOINT ====================
+
+    @app.route('/meeting/<meeting_id>/title', methods=['PATCH'])
+    def update_title(meeting_id: str):
+        """
+        Update the meeting title.
+        
+        Request Body:
+            title (str): The new meeting title
+        
+        Returns:
+            Success status and updated title
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        data = request.get_json()
+        if not data or 'title' not in data:
+            return jsonify({'error': 'title is required'}), 400
+        
+        new_title = data['title']
+        if not isinstance(new_title, str) or not new_title.strip():
+            return jsonify({'error': 'title must be a non-empty string'}), 400
+        
+        # Update in database
+        success = db.update_meeting_title(meeting_id, new_title.strip())
+        if not success:
+            return jsonify({'error': 'Failed to update title'}), 500
+        
+        return jsonify({
+            'success': True,
+            'title': new_title.strip()
+        }), 200
+
+    # ==================== GENERATE DOCUMENT ENDPOINT ====================
+
+    @app.route('/meeting/<meeting_id>/generate-document', methods=['POST'])
+    def generate_document(meeting_id: str):
+        """
+        Generate a well-formatted markdown document from the meeting summary and transcript.
+        This creates a professional document that can be shared or exported.
+        
+        Returns:
+            The generated document content (markdown)
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        if meeting.status != Status.finalized:
+            return jsonify({'error': 'Document can only be generated for finalized meetings'}), 400
+        
+        # Get current meeting state
+        latest_state = db.get_latest_state_version(meeting_id)
+        if not latest_state:
+            return jsonify({'error': 'No state found for meeting'}), 404
+        
+        # Generate the document using LLM
+        document = generate_meeting_document(
+            title=meeting.title or "Meeting Notes",
+            summary=latest_state.data.meetingSummary,
+            workflows=latest_state.data.workflows,
+            transcript=meeting.transcript
+        )
+        
+        # Save the generated document as the new meeting summary
+        updated_state = db.update_latest_state_summary(meeting_id, document)
+        if not updated_state:
+            return jsonify({'error': 'Failed to save document'}), 500
+        
+        return jsonify({
+            'success': True,
+            'document': document
+        }), 200
+
     # ==================== CHAT ENDPOINT ====================
 
     @app.route('/meeting/<meeting_id>/chat', methods=['POST'])
@@ -1086,6 +1162,70 @@ Be conversational and helpful. If you're not performing an action, set action to
             'message': f"I apologize, but I encountered an error processing your request. Please try again.",
             'action': None
         }
+
+
+def generate_meeting_document(title: str, summary: str, workflows: list, transcript: str = None) -> str:
+    """
+    Generate a well-formatted markdown document from meeting data.
+    
+    Args:
+        title: The meeting title
+        summary: The meeting summary bullet points
+        workflows: List of workflows identified in the meeting
+        transcript: Optional original transcript for additional context
+    
+    Returns:
+        A professional markdown document
+    """
+    from prompts.document_generation import (
+        DOCUMENT_GENERATION_SYSTEM_PROMPT,
+        get_document_generation_prompt
+    )
+    
+    # Build context for the LLM
+    workflow_info = ""
+    if workflows:
+        workflow_titles = [w.title for w in workflows]
+        workflow_info = f"\n\nWorkflows discussed: {', '.join(workflow_titles)}"
+    
+    transcript_snippet = ""
+    if transcript:
+        # Include first 5000 chars of transcript for context
+        transcript_snippet = f"\n\nTranscript excerpt:\n{transcript[:5000]}"
+    
+    prompt = get_document_generation_prompt(title, summary, workflow_info, transcript_snippet)
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": DOCUMENT_GENERATION_SYSTEM_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.4,
+            max_completion_tokens=5000
+        )
+        
+        document = response.choices[0].message.content.strip()
+        # Remove code fences if the model added them
+        if document.startswith("```markdown"):
+            document = document[11:]
+        if document.startswith("```"):
+            document = document[3:]
+        if document.endswith("```"):
+            document = document[:-3]
+        return document.strip()
+        
+    except Exception as e:
+        print(f"Error generating meeting document: {e}")
+        # Return a basic formatted version as fallback
+        return f"# {title}\n\n{summary}"
 
 
 def generate_meeting_title(meeting_summary: str, transcript: str = None) -> str:
