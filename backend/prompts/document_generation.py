@@ -47,6 +47,9 @@ CRITICAL FORMATTING RULES:
 - Use - for all bullets, never use • or * or indentation
 - Every bullet starts at column 0 with "- "
 - No nested lists
+- Use exactly ONE blank line between sections (between heading and content, between paragraphs)
+- Do NOT use multiple consecutive blank lines
+- Keep the document compact and scannable
 
 Return ONLY the markdown content, no code fences or explanations."""
 

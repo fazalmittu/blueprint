@@ -221,16 +221,15 @@ export function RichTextEditor({
 function parseMarkdownToHTML(markdown: string): string {
   if (!markdown) return "<p></p>";
   
-  let html = markdown;
-  
   // Split into lines for block-level processing
-  const lines = html.split("\n");
+  const lines = markdown.split("\n");
   const processedLines: string[] = [];
   let inCodeBlock = false;
   let codeBlockContent: string[] = [];
   let inList = false;
   let listType = "";
   let listItems: string[] = [];
+  let lastWasBlock = false; // Track if last element was a block (heading, list, etc)
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -241,6 +240,7 @@ function parseMarkdownToHTML(markdown: string): string {
         processedLines.push(`<pre><code>${codeBlockContent.join("\n")}</code></pre>`);
         codeBlockContent = [];
         inCodeBlock = false;
+        lastWasBlock = true;
       } else {
         // Close any open list
         if (inList) {
@@ -273,6 +273,7 @@ function parseMarkdownToHTML(markdown: string): string {
       const checked = taskMatch[1].toLowerCase() === "x";
       const content = processInlineMarkdown(taskMatch[2]);
       processedLines.push(`<ul data-type="taskList"><li data-type="taskItem" data-checked="${checked}"><label><input type="checkbox" ${checked ? "checked" : ""}><span></span></label><div><p>${content}</p></div></li></ul>`);
+      lastWasBlock = true;
       continue;
     }
     
@@ -303,42 +304,58 @@ function parseMarkdownToHTML(markdown: string): string {
       processedLines.push(`<${listType}>${listItems.map(li => `<li><p>${li}</p></li>`).join("")}</${listType}>`);
       listItems = [];
       inList = false;
+      lastWasBlock = true;
     }
     
     // Headings
     if (line.startsWith("### ")) {
       processedLines.push(`<h3>${processInlineMarkdown(line.slice(4))}</h3>`);
+      lastWasBlock = true;
       continue;
     }
     if (line.startsWith("## ")) {
       processedLines.push(`<h2>${processInlineMarkdown(line.slice(3))}</h2>`);
+      lastWasBlock = true;
       continue;
     }
     if (line.startsWith("# ")) {
       processedLines.push(`<h1>${processInlineMarkdown(line.slice(2))}</h1>`);
+      lastWasBlock = true;
       continue;
     }
     
     // Blockquotes
     if (line.startsWith("> ")) {
       processedLines.push(`<blockquote><p>${processInlineMarkdown(line.slice(2))}</p></blockquote>`);
+      lastWasBlock = true;
       continue;
     }
     
     // Horizontal rule
     if (line.match(/^[-*_]{3,}$/)) {
       processedLines.push("<hr>");
+      lastWasBlock = true;
       continue;
     }
     
-    // Empty line - preserve as empty paragraph
+    // Empty line - only preserve if between paragraphs (for intentional spacing)
     if (line.trim() === "") {
-      processedLines.push("<p></p>");
+      // Skip empty lines after block elements (headings, lists) - CSS handles spacing
+      // Also skip consecutive empty lines
+      if (!lastWasBlock && processedLines.length > 0) {
+        // Check if we need a break between paragraphs
+        const lastElement = processedLines[processedLines.length - 1];
+        if (lastElement && lastElement.startsWith("<p>") && !lastElement.startsWith("<p></p>")) {
+          // Don't add empty paragraphs - just let CSS handle spacing
+        }
+      }
+      lastWasBlock = false;
       continue;
     }
     
     // Regular paragraph
     processedLines.push(`<p>${processInlineMarkdown(line)}</p>`);
+    lastWasBlock = false;
   }
   
   // Close any remaining list
