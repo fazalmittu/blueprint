@@ -234,6 +234,7 @@ def create_fake_meetings():
         },
         {
             "org_id": "startup-inc",
+            "title": "Weekly Standup",
             "summary": "• Empty meeting - no discussion topics were covered.",
             "workflows": []
         }
@@ -250,7 +251,8 @@ def create_fake_meetings():
         meeting = Meeting(
             meetingId=meeting_id,
             status=status,
-            orgId=data["org_id"]
+            orgId=data["org_id"],
+            title=data.get("title")
         )
         create_meeting(meeting)
         
@@ -314,11 +316,12 @@ def create_fake_meetings():
         meetings_created.append({
             "meeting_id": meeting_id,
             "org_id": data["org_id"],
+            "title": data.get("title", "Untitled"),
             "status": status.value,
             "workflows_count": len(workflows)
         })
         
-        print(f"   ✅ Created meeting {i+1}: {meeting_id[:8]}... ({data['org_id']}, {len(workflows)} workflows)")
+        print(f"   ✅ Created meeting {i+1}: {data.get('title', 'Untitled')} ({data['org_id']}, {len(workflows)} workflows)")
     
     return meetings_created
 
@@ -343,9 +346,9 @@ def main():
     print("=" * 60)
     print(f"\n   Total meetings created: {len(meetings)}")
     print(f"   Database location: {DB_PATH}")
-    print("\n   Meeting IDs:")
+    print("\n   Meetings:")
     for m in meetings:
-        print(f"   - {m['meeting_id']} ({m['org_id']}, {m['status']}, {m['workflows_count']} workflows)")
+        print(f"   - {m['title']} ({m['org_id']}, {m['workflows_count']} workflows)")
     print()
 
 
