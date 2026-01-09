@@ -191,29 +191,21 @@ export function RichTextEditor({
       {/* Editor content */}
       <EditorContent editor={editor} />
 
-      {/* Floating status bar - only shows on hover or when there are changes */}
-      {editable && onSave && (
-        <div className={`editor-status-bar ${hasUnsavedChanges ? "has-changes" : ""}`}>
-          {hasUnsavedChanges ? (
-            <>
-              <span className="unsaved-indicator">
-                <span className="dot" />
-                Unsaved
-              </span>
-              <span className="keyboard-hint">⌘S</span>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="save-button"
-              >
-                {isSaving ? "Saving..." : "Save"}
-              </button>
-            </>
-          ) : lastSaved ? (
-            <span className="saved-indicator">
-              Saved {formatRelativeTime(lastSaved)}
-            </span>
-          ) : null}
+      {/* Floating status bar - only shows when there are unsaved changes */}
+      {editable && onSave && hasUnsavedChanges && (
+        <div className="editor-status-bar has-changes">
+          <span className="unsaved-indicator">
+            <span className="dot" />
+            Unsaved
+          </span>
+          <span className="keyboard-hint">⌘S</span>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="save-button"
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </button>
         </div>
       )}
     </div>
