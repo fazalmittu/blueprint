@@ -8,9 +8,10 @@ import TaskItem from "@tiptap/extension-task-item";
 import Underline from "@tiptap/extension-underline";
 import Typography from "@tiptap/extension-typography";
 import Highlight from "@tiptap/extension-highlight";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { BubbleToolbar } from "./BubbleToolbar";
 import { SlashCommand } from "./SlashCommand";
+import { useSaveState } from "../../../hooks/useSaveState";
 import "./editor.css";
 
 interface RichTextEditorProps {
@@ -35,9 +36,10 @@ export function RichTextEditor({
   autoFocus = false,
   noPadding = false,
 }: RichTextEditorProps) {
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // Use shared save state hook
+  const { hasUnsavedChanges, isSaving, markChanged, resetDirty, save } = useSaveState<string>({
+    onSave,
+  });
 
   const editor = useEditor({
     extensions: [
@@ -109,7 +111,7 @@ export function RichTextEditor({
       const html = editor.getHTML();
       const markdown = parseHTMLToMarkdown(html);
       onChange?.(markdown);
-      setHasUnsavedChanges(true);
+      markChanged();
     },
   });
 
@@ -119,10 +121,17 @@ export function RichTextEditor({
       const currentContent = parseHTMLToMarkdown(editor.getHTML());
       if (currentContent !== content) {
         editor.commands.setContent(parseMarkdownToHTML(content));
-        setHasUnsavedChanges(false);
+        resetDirty();
       }
     }
-  }, [content, editor]);
+  }, [content, editor, resetDirty]);
+
+  // Handle save - get current content and save
+  const handleSave = useCallback(async () => {
+    if (!editor || !onSave) return;
+    const markdown = parseHTMLToMarkdown(editor.getHTML());
+    await save(markdown);
+  }, [editor, onSave, save]);
 
   // Keyboard shortcut for save (Cmd+S)
   useEffect(() => {
@@ -137,23 +146,7 @@ export function RichTextEditor({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [editor, onSave, hasUnsavedChanges]);
-
-  const handleSave = useCallback(async () => {
-    if (!editor || !onSave) return;
-    
-    setIsSaving(true);
-    try {
-      const markdown = parseHTMLToMarkdown(editor.getHTML());
-      await onSave(markdown);
-      setLastSaved(new Date());
-      setHasUnsavedChanges(false);
-    } catch (error) {
-      console.error("Failed to save:", error);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [editor, onSave]);
+  }, [editor, onSave, hasUnsavedChanges, handleSave]);
 
   // Add link handler
   const setLink = useCallback(() => {
@@ -499,13 +492,3 @@ function nodeToMarkdown(node: Node): string {
       return children;
   }
 }
-
-function formatRelativeTime(date: Date): string {
-  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-  
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  return `${Math.floor(seconds / 3600)}h ago`;
-}
-

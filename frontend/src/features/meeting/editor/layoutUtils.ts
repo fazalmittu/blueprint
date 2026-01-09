@@ -36,10 +36,11 @@ export function workflowToReactFlow(workflow: Workflow): {
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
     rankdir: "TB", // Top to bottom layout
-    nodesep: 60,
-    ranksep: 80,
-    marginx: 20,
-    marginy: 20,
+    align: "UL", // Align nodes to upper-left for cleaner vertical alignment
+    nodesep: 80, // Horizontal spacing between nodes
+    ranksep: 60, // Vertical spacing between ranks
+    marginx: 40,
+    marginy: 40,
   });
 
   // Add nodes to dagre
@@ -77,19 +78,40 @@ export function workflowToReactFlow(workflow: Workflow): {
   });
 
   // Convert to React Flow edges
-  const edges: Edge[] = workflow.edges.map((edge: WorkflowEdge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    label: edge.label,
-    type: "smoothstep",
-    animated: false,
-    style: { strokeWidth: 2 },
-    labelStyle: { fontWeight: 500 },
-    labelBgStyle: { fill: "#f8fafc", fillOpacity: 0.9 },
-    labelBgPadding: [4, 2] as [number, number],
-    labelBgBorderRadius: 4,
-  }));
+  // For decision nodes, use specific handles based on label (Yes/No)
+  const edges: Edge[] = workflow.edges.map((edge: WorkflowEdge) => {
+    const sourceNode = workflow.nodes.find((n: WorkflowNode) => n.id === edge.source);
+    const isFromDecision = sourceNode?.type === "decision";
+    
+    // Determine source handle based on label for decision nodes
+    let sourceHandle: string | undefined;
+    if (isFromDecision && edge.label) {
+      const labelLower = edge.label.toLowerCase();
+      if (labelLower === "yes" || labelLower === "y" || labelLower === "true") {
+        sourceHandle = "yes";
+      } else if (labelLower === "no" || labelLower === "n" || labelLower === "false") {
+        sourceHandle = "no";
+      } else {
+        sourceHandle = "default";
+      }
+    }
+
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle,
+      label: edge.label,
+      type: "smoothstep",
+      pathOptions: { borderRadius: 16 }, // Smoother corners
+      animated: false,
+      style: { strokeWidth: 2, stroke: "#94a3b8" },
+      labelStyle: { fontWeight: 500, fontSize: 11 },
+      labelBgStyle: { fill: "#f8fafc", fillOpacity: 0.95 },
+      labelBgPadding: [6, 4] as [number, number],
+      labelBgBorderRadius: 4,
+    };
+  });
 
   return { nodes, edges };
 }
@@ -134,10 +156,11 @@ export function relayoutNodes(
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
     rankdir: "TB",
-    nodesep: 60,
-    ranksep: 80,
-    marginx: 20,
-    marginy: 20,
+    align: "UL",
+    nodesep: 80,
+    ranksep: 60,
+    marginx: 40,
+    marginy: 40,
   });
 
   // Add nodes

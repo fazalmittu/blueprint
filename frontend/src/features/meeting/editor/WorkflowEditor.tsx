@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useEffect } from "react";
 import {
   ReactFlow,
   Background,
@@ -19,6 +19,7 @@ import "@xyflow/react/dist/style.css";
 import { ProcessNode } from "./nodes/ProcessNode";
 import { DecisionNode } from "./nodes/DecisionNode";
 import { TerminalNode } from "./nodes/TerminalNode";
+import { useSaveState } from "../../../hooks/useSaveState";
 
 // Node types for React Flow
 const nodeTypes: NodeTypes = {
@@ -30,7 +31,7 @@ const nodeTypes: NodeTypes = {
 interface WorkflowEditorProps {
   initialNodes?: Node[];
   initialEdges?: Edge[];
-  onSave?: (nodes: Node[], edges: Edge[]) => void;
+  onSave?: (nodes: Node[], edges: Edge[]) => Promise<void> | void;
   onCancel?: () => void;
   readOnly?: boolean;
 }
@@ -51,7 +52,32 @@ export function WorkflowEditor({
 }: WorkflowEditorProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [hasChanges, setHasChanges] = useState(false);
+
+  // Use shared save state hook
+  const { hasUnsavedChanges, isSaving, markChanged, save } = useSaveState<{
+    nodes: Node[];
+    edges: Edge[];
+  }>({
+    onSave: onSave ? async (data) => onSave(data.nodes, data.edges) : undefined,
+    enableKeyboardShortcut: !readOnly,
+  });
+
+  // Handle Cmd+S keyboard shortcut
+  useEffect(() => {
+    if (readOnly || !onSave) return;
+
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        if (hasUnsavedChanges) {
+          await save({ nodes, edges });
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [readOnly, onSave, hasUnsavedChanges, save, nodes, edges]);
 
   // Handle new connections
   const onConnect: OnConnect = useCallback(
@@ -63,9 +89,9 @@ export function WorkflowEditor({
         style: { stroke: "var(--border-strong)", strokeWidth: 2 },
       };
       setEdges((eds) => addEdge(edge, eds));
-      setHasChanges(true);
+      markChanged();
     },
-    [setEdges]
+    [setEdges, markChanged]
   );
 
   // Handle node label changes
@@ -78,9 +104,9 @@ export function WorkflowEditor({
             : node
         )
       );
-      setHasChanges(true);
+      markChanged();
     },
-    [setNodes]
+    [setNodes, markChanged]
   );
 
   // Enhanced nodes with label change callback
@@ -130,17 +156,17 @@ export function WorkflowEditor({
       }
 
       setNodes((nds) => [...nds, newNode]);
-      setHasChanges(true);
+      markChanged();
     },
-    [nodes.length, setNodes]
+    [nodes.length, setNodes, markChanged]
   );
 
   // Delete selected nodes/edges
   const onDelete = useCallback(() => {
     setNodes((nds) => nds.filter((node) => !node.selected));
     setEdges((eds) => eds.filter((edge) => !edge.selected));
-    setHasChanges(true);
-  }, [setNodes, setEdges]);
+    markChanged();
+  }, [setNodes, setEdges, markChanged]);
 
   // Handle keyboard shortcuts
   const onKeyDown = useCallback(
@@ -153,10 +179,9 @@ export function WorkflowEditor({
   );
 
   // Handle save
-  const handleSave = useCallback(() => {
-    onSave?.(nodes, edges);
-    setHasChanges(false);
-  }, [nodes, edges, onSave]);
+  const handleSave = useCallback(async () => {
+    await save({ nodes, edges });
+  }, [nodes, edges, save]);
 
   return (
     <div
@@ -273,14 +298,15 @@ export function WorkflowEditor({
               </button>
               <button
                 onClick={handleSave}
-                disabled={!hasChanges}
+                disabled={!hasUnsavedChanges || isSaving}
                 style={{
                   ...toolbarButtonStyle,
-                  background: hasChanges ? "var(--accent)" : "var(--bg-tertiary)",
-                  color: hasChanges ? "white" : "var(--text-muted)",
+                  background: hasUnsavedChanges && !isSaving ? "var(--accent)" : "var(--bg-tertiary)",
+                  color: hasUnsavedChanges && !isSaving ? "white" : "var(--text-muted)",
+                  opacity: isSaving ? 0.7 : 1,
                 }}
               >
-                Save
+                {isSaving ? "Saving..." : "Save"}
               </button>
             </div>
           </Panel>
