@@ -42,6 +42,7 @@ def create_fake_meetings():
     fake_data = [
         {
             "org_id": "acme-corp",
+            "title": "Q1 Roadmap Planning",
             "summary": "• Discussed Q1 roadmap priorities\n• Team agreed to focus on customer onboarding improvements\n• API v2 launch scheduled for end of quarter\n• Sarah will lead the onboarding workstream\n• Mike handles API development",
             "workflows": [
                 {
@@ -98,6 +99,7 @@ def create_fake_meetings():
         },
         {
             "org_id": "startup-inc",
+            "title": "Sprint Retrospective",
             "summary": "• Sprint retrospective meeting held\n• Team identified bottlenecks in code review process\n• Decision to implement pair programming for complex features\n• Will automate deployment pipeline",
             "workflows": [
                 {
@@ -133,6 +135,7 @@ def create_fake_meetings():
         },
         {
             "org_id": "enterprise-solutions",
+            "title": "Outage Post-Mortem",
             "summary": "• Incident post-mortem for last week's outage\n• Root cause: database connection pool exhaustion\n• Action item: implement connection monitoring\n• Action item: add circuit breakers\n• Action item: improve alerting thresholds",
             "workflows": [
                 {
@@ -195,6 +198,7 @@ def create_fake_meetings():
         },
         {
             "org_id": "acme-corp",
+            "title": "Mobile App Design Review",
             "summary": "• Product design review for mobile app redesign\n• Agreed on new navigation structure\n• Updated color scheme approved\n• UX team will create prototypes by next Friday",
             "workflows": [
                 {
