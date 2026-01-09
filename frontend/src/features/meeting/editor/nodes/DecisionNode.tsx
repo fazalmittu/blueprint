@@ -68,9 +68,11 @@ export const DecisionNode = memo(function DecisionNode({
         transition: "all var(--transition-fast)",
       }}
     >
+      {/* Top target handle - for normal forward edges */}
       <Handle
         type="target"
         position={Position.Top}
+        id="top"
         style={{
           background: "#f59e0b",
           border: "2px solid var(--bg-elevated)",
@@ -79,6 +81,22 @@ export const DecisionNode = memo(function DecisionNode({
           transform: "rotate(-45deg)",
           top: -5,
           left: "50%",
+        }}
+      />
+      
+      {/* Left target handle - for back-edges (loops) */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left"
+        style={{
+          background: "#f59e0b",
+          border: "2px solid var(--bg-elevated)",
+          width: 10,
+          height: 10,
+          transform: "rotate(-45deg)",
+          left: -5,
+          top: "50%",
         }}
       />
 

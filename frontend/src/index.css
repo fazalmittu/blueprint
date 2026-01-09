@@ -155,3 +155,31 @@ body {
   background: var(--accent-subtle);
   color: var(--accent);
 }
+
+/* ============================================
+   React Flow — Edge Selection Styles
+   ============================================ */
+
+/* Selected edge - just change color */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent) !important;
+}
+
+/* Hover effect on edges */
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--accent-muted) !important;
+}
+
+/* Selected edge label */
+.react-flow__edge.selected .react-flow__edge-textbg {
+  fill: var(--accent-subtle) !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-text {
+  fill: var(--accent) !important;
+}
+
+/* Make edges easier to click */
+.react-flow__edge-interaction {
+  stroke-width: 20px;
+}

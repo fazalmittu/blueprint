@@ -67,9 +67,24 @@ export const ProcessNode = memo(function ProcessNode({
         transition: "all var(--transition-fast)",
       }}
     >
+      {/* Top target handle - for normal forward edges */}
       <Handle
         type="target"
         position={Position.Top}
+        id="top"
+        style={{
+          background: "var(--accent)",
+          border: "2px solid var(--bg-elevated)",
+          width: 10,
+          height: 10,
+        }}
+      />
+      
+      {/* Left target handle - for back-edges (loops) */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left"
         style={{
           background: "var(--accent)",
           border: "2px solid var(--bg-elevated)",

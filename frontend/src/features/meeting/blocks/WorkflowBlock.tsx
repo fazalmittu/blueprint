@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   ReactFlow,
@@ -12,7 +12,7 @@ import type { Workflow } from "@/types";
 import { DraggableBlock, type Position } from "./DraggableBlock";
 import { BlockHeader } from "./BlockHeader";
 import { WorkflowEditor } from "../editor";
-import { workflowToReactFlow } from "../editor/layoutUtils";
+import { workflowToReactFlow, workflowToReactFlowAsync } from "../editor/layoutUtils";
 import { ProcessNode, DecisionNode, TerminalNode } from "../editor/nodes";
 
 // Node types for React Flow
@@ -57,12 +57,38 @@ export function WorkflowBlock({
   const [isMinimized, setIsMinimized] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  
+  // Use async ELK layout for better results
+  const [displayNodes, setDisplayNodes] = useState<Node[]>([]);
+  const [displayEdges, setDisplayEdges] = useState<Edge[]>([]);
+  const [isLayouting, setIsLayouting] = useState(true);
 
-  // Convert workflow to React Flow format with layout
-  const { nodes: displayNodes, edges: displayEdges } = useMemo(
-    () => workflowToReactFlow(workflow),
-    [workflow]
-  );
+  // Run async layout when workflow changes
+  useEffect(() => {
+    let cancelled = false;
+    setIsLayouting(true);
+    
+    // Start with sync layout for immediate display
+    const syncResult = workflowToReactFlow(workflow);
+    setDisplayNodes(syncResult.nodes);
+    setDisplayEdges(syncResult.edges);
+    
+    // Then run async ELK layout for better results
+    workflowToReactFlowAsync(workflow).then((result) => {
+      if (!cancelled) {
+        setDisplayNodes(result.nodes);
+        setDisplayEdges(result.edges);
+        setIsLayouting(false);
+      }
+    }).catch((err) => {
+      console.error("ELK layout failed:", err);
+      setIsLayouting(false);
+    });
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [workflow]);
 
   const toggleMinimize = useCallback(() => {
     setIsMinimized(!isMinimized);

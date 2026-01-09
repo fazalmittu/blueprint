@@ -100,18 +100,32 @@ export const TerminalNode = memo(function TerminalNode({
         />
       )}
 
-      {/* End nodes only have target handle (top) */}
+      {/* End nodes have target handles */}
       {!isStart && (
-        <Handle
-          type="target"
-          position={Position.Top}
-          style={{
-            background: handleColor,
-            border: "2px solid var(--bg-elevated)",
-            width: 10,
-            height: 10,
-          }}
-        />
+        <>
+          <Handle
+            type="target"
+            position={Position.Top}
+            id="top"
+            style={{
+              background: handleColor,
+              border: "2px solid var(--bg-elevated)",
+              width: 10,
+              height: 10,
+            }}
+          />
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="left"
+            style={{
+              background: handleColor,
+              border: "2px solid var(--bg-elevated)",
+              width: 10,
+              height: 10,
+            }}
+          />
+        </>
       )}
 
       {isEditing ? (
