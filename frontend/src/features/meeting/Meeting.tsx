@@ -132,6 +132,18 @@ function MeetingContent({
   // Chat panel state
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  // Keyboard shortcut: Cmd+I to toggle chat
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "i") {
+        e.preventDefault();
+        setIsChatOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // Handle workflow update from canvas
   const handleWorkflowUpdate = useCallback(
     async (workflowId: string, nodes: Node[], edges: Edge[]) => {
@@ -286,123 +298,147 @@ function MeetingContent({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "0 var(--space-md)",
+          padding: "0 var(--space-sm) 0 var(--space-xs)",
           flexShrink: 0,
         }}
       >
-        <button
-          onClick={() => navigate("/")}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-sm)",
-            color: "var(--text-secondary)",
-            fontSize: "0.875rem",
-          }}
-        >
-          ← Back
-        </button>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
-          {/* Meeting title */}
+        {/* Left section: back + title + status */}
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", minWidth: 0 }}>
+          <button
+            onClick={() => navigate("/")}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 32,
+              height: 32,
+              borderRadius: "var(--radius-sm)",
+              color: "var(--text-muted)",
+              transition: "var(--transition-fast)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--bg-tertiary)";
+              e.currentTarget.style.color = "var(--text-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "none";
+              e.currentTarget.style.color = "var(--text-muted)";
+            }}
+            title="Back to meetings"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          
+          <div style={{ width: 1, height: 16, background: "var(--border-subtle)" }} />
+          
           <span
             style={{
               fontWeight: 500,
-              fontSize: "0.9375rem",
+              fontSize: "0.875rem",
               color: "var(--text-primary)",
-              maxWidth: "300px",
+              maxWidth: "320px",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
             }}
-            title={meeting.title || `Meeting ${meeting.meetingId.slice(0, 8)}...`}
+            title={meeting.title || "Untitled Meeting"}
           >
-            {meeting.title || `Meeting ${meeting.meetingId.slice(0, 8)}...`}
+            {meeting.title || "Untitled Meeting"}
           </span>
+          
+          <span
+            style={{
+              fontSize: "0.625rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              padding: "3px 7px",
+              borderRadius: 4,
+              background: isProcessing 
+                ? "rgba(245, 158, 11, 0.12)" 
+                : meeting.status === "finalized"
+                  ? "rgba(99, 102, 241, 0.1)"
+                  : "rgba(16, 185, 129, 0.1)",
+              color: isProcessing
+                ? "#b45309"
+                : meeting.status === "finalized" 
+                  ? "#4f46e5" 
+                  : "#059669",
+            }}
+          >
+            {isProcessing ? "Processing" : meeting.status}
+          </span>
+          
           {isProcessing && (
             <span style={{
               display: "flex",
               alignItems: "center",
-              gap: "var(--space-xs)",
+              gap: 6,
               fontSize: "0.75rem",
-              color: "#d97706",
+              color: "var(--text-muted)",
             }}>
               <div style={{
-                width: "8px",
-                height: "8px",
+                width: 6,
+                height: 6,
                 borderRadius: "50%",
                 background: "#f59e0b",
                 animation: "pulse 1.5s ease-in-out infinite",
               }} />
-              Processing chunk {(processingChunkIndex ?? 0) + 1}/{meeting.totalChunks}
+              {(processingChunkIndex ?? 0) + 1}/{meeting.totalChunks}
             </span>
           )}
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.6875rem",
-              color: "var(--text-muted)",
-            }}
-          >
-            {meeting.meetingId.slice(0, 8)}...
-          </span>
-          <span
-            style={{
-              fontSize: "0.6875rem",
-              fontWeight: 500,
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              padding: "2px 8px",
-              borderRadius: 9999,
-              background: meeting.status === "finalized" 
-                ? "#e0e7ff" 
-                : isProcessing 
-                  ? "rgba(245, 158, 11, 0.2)" 
-                  : "#dcfce7",
-              color: meeting.status === "finalized" 
-                ? "#3730a3" 
-                : isProcessing
-                  ? "#d97706"
-                  : "#166534",
-            }}
-          >
-            {isProcessing ? "processing" : meeting.status}
-          </span>
-          
-          {/* Chat toggle button */}
-          <button
-            onClick={() => setIsChatOpen(!isChatOpen)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "var(--space-xs)",
-              padding: "6px 12px",
-              background: isChatOpen ? "var(--accent)" : "var(--bg-tertiary)",
-              color: isChatOpen ? "white" : "var(--text-secondary)",
-              border: "none",
-              borderRadius: "var(--radius-md)",
-              cursor: "pointer",
-              fontSize: "0.8125rem",
-              fontWeight: 500,
-              transition: "var(--transition-fast)",
-            }}
-            title={isChatOpen ? "Close chat" : "Open chat assistant"}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            Chat
-          </button>
         </div>
+
+        {/* Right section: chat toggle */}
+        <button
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 34,
+            height: 34,
+            background: isChatOpen ? "var(--accent)" : "transparent",
+            color: isChatOpen ? "white" : "var(--text-muted)",
+            border: isChatOpen ? "none" : "1px solid var(--border-subtle)",
+            borderRadius: "var(--radius-sm)",
+            cursor: "pointer",
+            transition: "var(--transition-fast)",
+          }}
+          onMouseEnter={(e) => {
+            if (!isChatOpen) {
+              e.currentTarget.style.background = "var(--bg-tertiary)";
+              e.currentTarget.style.borderColor = "var(--border-default)";
+              e.currentTarget.style.color = "var(--text-primary)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isChatOpen) {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.borderColor = "var(--border-subtle)";
+              e.currentTarget.style.color = "var(--text-muted)";
+            }
+          }}
+          title={isChatOpen ? "Close assistant" : "Open AI assistant"}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+          </svg>
+        </button>
       </div>
 
       {/* Main content area */}
