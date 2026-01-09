@@ -20,6 +20,7 @@ interface RichTextEditorProps {
   placeholder?: string;
   editable?: boolean;
   autoFocus?: boolean;
+  noPadding?: boolean;
 }
 
 /**
@@ -32,6 +33,7 @@ export function RichTextEditor({
   placeholder = "Start writing...",
   editable = true,
   autoFocus = false,
+  noPadding = false,
 }: RichTextEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -100,7 +102,7 @@ export function RichTextEditor({
     autofocus: autoFocus ? "end" : false,
     editorProps: {
       attributes: {
-        class: "rich-text-editor-content",
+        class: noPadding ? "rich-text-editor-content no-padding" : "rich-text-editor-content",
       },
     },
     onUpdate: ({ editor }) => {

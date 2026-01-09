@@ -23,6 +23,12 @@
   color: var(--text-primary);
 }
 
+/* No padding variant - when parent handles padding */
+.rich-text-editor-content.no-padding {
+  padding: 0;
+  max-width: none;
+}
+
 /* Placeholder styling */
 .rich-text-editor-content.is-editor-empty:first-child::before {
   content: attr(data-placeholder);

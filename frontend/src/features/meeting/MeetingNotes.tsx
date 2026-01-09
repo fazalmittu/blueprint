@@ -90,6 +90,10 @@ export function MeetingNotes({
     }
   }, [onGenerateDocument]);
 
+  // Shared content width for perfect alignment
+  const contentMaxWidth = 900;
+  const contentPadding = 48; // 3rem = 48px
+
   return (
     <div
       style={{
@@ -97,192 +101,184 @@ export function MeetingNotes({
         display: "flex",
         flexDirection: "column",
         background: "var(--bg-primary)",
+        overflow: "auto",
       }}
     >
-      {/* Header with title and generate button - matches editor padding exactly */}
+      {/* Centered content container */}
       <div
         style={{
-          padding: "1.5rem 3rem 1rem",
-          flexShrink: 0,
-          maxWidth: 900,
+          maxWidth: contentMaxWidth,
           width: "100%",
           margin: "0 auto",
+          paddingLeft: contentPadding,
+          paddingRight: contentPadding,
           boxSizing: "border-box",
           display: "flex",
-          alignItems: "center",
-          gap: 12,
+          flexDirection: "column",
+          flex: 1,
+          minHeight: 0,
         }}
       >
-        {/* Editable title */}
-        {isEditingTitle ? (
-          <input
-            ref={titleInputRef}
-            type="text"
-            value={editedTitle}
-            onChange={(e) => setEditedTitle(e.target.value)}
-            onBlur={handleTitleSave}
-            onKeyDown={handleTitleKeyDown}
-            disabled={isSavingTitle}
-            style={{
-              flex: 1,
-              fontSize: "1.75rem",
-              fontWeight: 700,
-              color: "var(--text-primary)",
-              background: "transparent",
-              border: "none",
-              borderBottom: "2px solid var(--accent)",
-              outline: "none",
-              padding: "2px 0",
-              margin: 0,
-              fontFamily: "inherit",
-              letterSpacing: "-0.02em",
-            }}
-          />
-        ) : (
-          <h1
-            onClick={handleTitleClick}
-            style={{
-              flex: 1,
-              margin: 0,
-              fontSize: "1.75rem",
-              fontWeight: 700,
-              color: "var(--text-primary)",
-              cursor: isEditable && !isProcessing ? "text" : "default",
-              padding: "2px 0",
-              letterSpacing: "-0.02em",
-            }}
-            title={isEditable ? "Click to edit title" : undefined}
-          >
-            {title || "Untitled Meeting"}
-          </h1>
-        )}
-
-        {/* Sparkle/AI generate button */}
-        {isEditable && !isProcessing && onGenerateDocument && (
-          <button
-            onClick={handleGenerateDocument}
-            disabled={isGenerating}
-            style={{
-              padding: 6,
-              background: "transparent",
-              border: "none",
-              borderRadius: 6,
-              color: isGenerating ? "var(--accent)" : "var(--text-muted)",
-              cursor: isGenerating ? "default" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "color 0.15s ease",
-            }}
-            onMouseOver={(e) => {
-              if (!isGenerating) {
-                e.currentTarget.style.color = "var(--accent)";
-              }
-            }}
-            onMouseOut={(e) => {
-              if (!isGenerating) {
-                e.currentTarget.style.color = "var(--text-muted)";
-              }
-            }}
-            title="Generate formatted document with AI"
-          >
-            <svg 
-              width="20" 
-              height="20" 
-              viewBox="0 0 24 24" 
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+        {/* Header with title and generate button */}
+        <div
+          style={{
+            paddingTop: 24,
+            paddingBottom: 16,
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          {/* Editable title */}
+          {isEditingTitle ? (
+            <input
+              ref={titleInputRef}
+              type="text"
+              value={editedTitle}
+              onChange={(e) => setEditedTitle(e.target.value)}
+              onBlur={handleTitleSave}
+              onKeyDown={handleTitleKeyDown}
+              disabled={isSavingTitle}
               style={{
-                animation: isGenerating ? "spin 1s linear infinite" : "none",
+                flex: 1,
+                fontSize: "1.75rem",
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                background: "transparent",
+                border: "none",
+                borderBottom: "2px solid var(--accent)",
+                outline: "none",
+                padding: "2px 0",
+                margin: 0,
+                fontFamily: "inherit",
+                letterSpacing: "-0.02em",
               }}
+            />
+          ) : (
+            <h1
+              onClick={handleTitleClick}
+              style={{
+                flex: 1,
+                margin: 0,
+                fontSize: "1.75rem",
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                cursor: isEditable && !isProcessing ? "text" : "default",
+                padding: "2px 0",
+                letterSpacing: "-0.02em",
+              }}
+              title={isEditable ? "Click to edit title" : undefined}
             >
-              {/* Clean sparkles icon */}
-              <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-              <path d="M19 13l.75 2.25L22 16l-2.25.75L19 19l-.75-2.25L16 16l2.25-.75L19 13z" />
-              <path d="M5 17l.5 1.5L7 19l-1.5.5L5 21l-.5-1.5L3 19l1.5-.5L5 17z" />
-            </svg>
-          </button>
-        )}
-      </div>
+              {title || "Untitled Meeting"}
+            </h1>
+          )}
 
-      {/* Divider */}
-      <div
-        style={{
-          maxWidth: 900,
-          width: "100%",
-          margin: "0 auto",
-          padding: "0 3rem",
-          boxSizing: "border-box",
-        }}
-      >
+          {/* Sparkle/AI generate button */}
+          {isEditable && !isProcessing && onGenerateDocument && (
+            <button
+              onClick={handleGenerateDocument}
+              disabled={isGenerating}
+              style={{
+                padding: 6,
+                background: "transparent",
+                border: "none",
+                borderRadius: 6,
+                color: isGenerating ? "var(--accent)" : "var(--text-muted)",
+                cursor: isGenerating ? "default" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "color 0.15s ease",
+              }}
+              onMouseOver={(e) => {
+                if (!isGenerating) {
+                  e.currentTarget.style.color = "var(--accent)";
+                }
+              }}
+              onMouseOut={(e) => {
+                if (!isGenerating) {
+                  e.currentTarget.style.color = "var(--text-muted)";
+                }
+              }}
+              title="Generate formatted document with AI"
+            >
+              <svg 
+                width="20" 
+                height="20" 
+                viewBox="0 0 24 24" 
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  animation: isGenerating ? "spin 1s linear infinite" : "none",
+                }}
+              >
+                {/* Clean sparkles icon */}
+                <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+                <path d="M19 13l.75 2.25L22 16l-2.25.75L19 19l-.75-2.25L16 16l2.25-.75L19 13z" />
+                <path d="M5 17l.5 1.5L7 19l-1.5.5L5 21l-.5-1.5L3 19l1.5-.5L5 17z" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Divider */}
         <div
           style={{
             height: 1,
             background: "var(--border-subtle)",
+            flexShrink: 0,
           }}
         />
-      </div>
 
-      {/* Processing indicator */}
-      {isProcessing && (
-        <div
-          style={{
-            padding: "12px 3rem",
-            background: "linear-gradient(90deg, var(--accent-subtle) 0%, transparent 100%)",
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-sm)",
-            flexShrink: 0,
-            maxWidth: 900,
-            margin: "0 auto",
-            width: "100%",
-            boxSizing: "border-box",
-          }}
-        >
+        {/* Processing indicator */}
+        {isProcessing && (
           <div
             style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: "var(--accent)",
-              animation: "pulse 1.5s ease-in-out infinite",
+              padding: "12px 0",
+              background: "linear-gradient(90deg, var(--accent-subtle) 0%, transparent 100%)",
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-sm)",
+              flexShrink: 0,
             }}
-          />
-          <span style={{ fontSize: "0.875rem", color: "var(--accent)", fontWeight: 500 }}>
-            Processing transcript... Chunk {(processingChunkIndex ?? 0) + 1}
-          </span>
-        </div>
-      )}
+          >
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "var(--accent)",
+                animation: "pulse 1.5s ease-in-out infinite",
+              }}
+            />
+            <span style={{ fontSize: "0.875rem", color: "var(--accent)", fontWeight: 500 }}>
+              Processing transcript... Chunk {(processingChunkIndex ?? 0) + 1}
+            </span>
+          </div>
+        )}
 
-      {/* Content area - either skeleton or editor */}
-      {isGenerating ? (
-        <div 
-          style={{ 
-            flex: 1, 
-            overflow: "auto", 
-            padding: "1rem 3rem 2rem", 
-            maxWidth: 900, 
-            margin: "0 auto", 
-            width: "100%",
-            boxSizing: "border-box",
-          }}
-        >
-          <SkeletonLoader />
-        </div>
-      ) : (
-        <div style={{ flex: 1, overflow: "auto" }}>
-          <RichTextEditor
-            content={summary}
-            onSave={onSummaryChange}
-            placeholder="Start writing your meeting notes... (Type '/' for commands)"
-            editable={isEditable && !isProcessing}
-            autoFocus={false}
-          />
-        </div>
-      )}
+        {/* Content area - either skeleton or editor */}
+        {isGenerating ? (
+          <div style={{ paddingTop: 16, paddingBottom: 32, flex: 1 }}>
+            <SkeletonLoader />
+          </div>
+        ) : (
+          <div style={{ paddingTop: 16, paddingBottom: 32, flex: 1, minHeight: 0 }}>
+            <RichTextEditor
+              content={summary}
+              onSave={onSummaryChange}
+              placeholder="Start writing your meeting notes... (Type '/' for commands)"
+              editable={isEditable && !isProcessing}
+              autoFocus={false}
+              noPadding
+            />
+          </div>
+        )}
+      </div>
 
       {/* Keyframe animations */}
       <style>{`
