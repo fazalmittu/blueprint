@@ -28,6 +28,16 @@ const pulseKeyframes = `
     border-color: rgba(59, 130, 246, 0.8);
   }
 }
+@keyframes cornerPulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
 `;
 
 // Inject styles once
@@ -68,7 +78,7 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
   const [splitTabs, setSplitTabs] = useState<[string, string] | null>(null);
   const [splitRatio, setSplitRatio] = useState(0.5);
   const [dragState, setDragState] = useState<DragState | null>(null);
-  const [showDropZone, setShowDropZone] = useState(false);
+  const [dropZoneSide, setDropZoneSide] = useState<"left" | "right" | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
@@ -95,24 +105,27 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
   }, [layout]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragState) return;
+    if (!dragState || !containerRef.current) return;
     
-    const deltaY = e.clientY - dragState.startY;
-    const deltaX = e.clientX - dragState.startX;
+    const deltaY = Math.abs(e.clientY - dragState.startY);
+    const deltaX = Math.abs(e.clientX - dragState.startX);
     
-    // Show drop zone when dragging right significantly
+    // Show drop zone when dragging enough distance
     if (deltaX > 50 || deltaY > 50) {
-      setShowDropZone(true);
+      // Determine side based on cursor position relative to container center
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const containerCenterX = containerRect.left + containerRect.width / 2;
+      setDropZoneSide(e.clientX < containerCenterX ? "left" : "right");
     } else {
-      setShowDropZone(false);
+      setDropZoneSide(null);
     }
   }, [dragState]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
-    if (!dragState) return;
+    if (!dragState || !containerRef.current) return;
     
-    const deltaY = e.clientY - dragState.startY;
-    const deltaX = e.clientX - dragState.startX;
+    const deltaY = Math.abs(e.clientY - dragState.startY);
+    const deltaX = Math.abs(e.clientX - dragState.startX);
     
     // If dragged enough and we have at least 2 tabs, split
     if ((deltaX > 50 || deltaY > 50) && tabs.length >= 2) {
@@ -120,15 +133,23 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
       const otherTab = tabs.find(t => t.id !== dragState.tabId);
       if (otherTab) {
         setLayout("split-vertical");
-        // Left panel gets the OTHER tab (not being dragged), right panel gets the dragged tab
-        setSplitTabs([otherTab.id, dragState.tabId]);
+        // Determine panel order based on cursor position
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const containerCenterX = containerRect.left + containerRect.width / 2;
+        if (e.clientX < containerCenterX) {
+          // Cursor on left: dragged tab goes to left panel
+          setSplitTabs([dragState.tabId, otherTab.id]);
+        } else {
+          // Cursor on right: dragged tab goes to right panel
+          setSplitTabs([otherTab.id, dragState.tabId]);
+        }
         // Reset to exactly 50/50 split
         setSplitRatio(0.5);
       }
     }
     
     setDragState(null);
-    setShowDropZone(false);
+    setDropZoneSide(null);
   }, [dragState, tabs]);
 
   const handleClosePane = useCallback((paneIndex: 0 | 1) => {
@@ -202,7 +223,7 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
       onMouseLeave={() => {
         if (dragState) {
           setDragState(null);
-          setShowDropZone(false);
+          setDropZoneSide(null);
         }
       }}
     >
@@ -259,18 +280,36 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
       </div>
 
       {/* Content area */}
-      <div style={{ flex: 1, position: "relative", overflow: "hidden", display: "flex" }}>
+      <div style={{ flex: 1, position: "relative", overflow: "hidden", display: layout === "split-vertical" ? "flex" : "block" }}>
         {layout === "single" ? (
-          // Single tab view - shrink when drop zone is shown
+          // Single tab view - slides when drop zone appears
           <div
             style={{
-              height: "100%",
-              width: showDropZone ? "50%" : "100%",
-              overflow: "auto",
-              transition: "width 0.2s ease-out",
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: "flex",
+              transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+              transform: dropZoneSide === "left" 
+                ? "translateX(50%)" 
+                : dropZoneSide === "right"
+                  ? "translateX(0)"
+                  : "translateX(0)",
             }}
           >
-            {getTabContent(activeTab || tabs[0]?.id)}
+            <div
+              style={{
+                height: "100%",
+                width: dropZoneSide ? "50%" : "100%",
+                overflow: "auto",
+                transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                flexShrink: 0,
+              }}
+            >
+              {getTabContent(activeTab || tabs[0]?.id)}
+            </div>
           </div>
         ) : (
           // Split view - side by side
@@ -445,20 +484,34 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
           </>
         )}
 
-        {/* Drop zone indicator - shows as empty space on the right */}
-        {showDropZone && (
-          <div
-            style={{
-              width: "50%",
-              height: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderLeft: "2px dashed rgba(59, 130, 246, 0.6)",
-              flexShrink: 0,
-              animation: "dropZonePulse 1.2s ease-in-out infinite",
-            }}
-          >
+        {/* Drop zone indicator - shows on left or right based on drag direction */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            width: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderLeft: dropZoneSide === "right" ? "2px dashed rgba(59, 130, 246, 0.6)" : "none",
+            borderRight: dropZoneSide === "left" ? "2px dashed rgba(59, 130, 246, 0.6)" : "none",
+            animation: dropZoneSide ? "dropZonePulse 1.2s ease-in-out infinite" : "none",
+            opacity: dropZoneSide ? 1 : 0,
+            pointerEvents: dropZoneSide ? "auto" : "none",
+            transition: "opacity 0.2s ease-out, transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+            transform: dropZoneSide === "right" ? "translateX(100%)" : "translateX(0)",
+          }}
+        >
+          {dropZoneSide && (
+            <>
+            {/* Pulsing corners */}
+            <DropZoneCorner position="top-left" />
+            <DropZoneCorner position="top-right" />
+            <DropZoneCorner position="bottom-left" />
+            <DropZoneCorner position="bottom-right" />
+            
             <div
               style={{
                 display: "flex",
@@ -492,9 +545,53 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
                 Drop to split view
               </span>
             </div>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Pulsing corner decoration for drop zone
+ */
+function DropZoneCorner({ position }: { position: "top-left" | "top-right" | "bottom-left" | "bottom-right" }) {
+  const isTop = position.startsWith("top");
+  const isLeft = position.endsWith("left");
+  
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: isTop ? 12 : "auto",
+        bottom: isTop ? "auto" : 12,
+        left: isLeft ? 12 : "auto",
+        right: isLeft ? "auto" : 12,
+        width: 24,
+        height: 24,
+        animation: "cornerPulse 1.2s ease-in-out infinite",
+      }}
+    >
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        style={{
+          transform: `rotate(${
+            position === "top-left" ? 0 :
+            position === "top-right" ? 90 :
+            position === "bottom-right" ? 180 :
+            270
+          }deg)`,
+        }}
+      >
+        <path d="M4 14V4h10" />
+      </svg>
     </div>
   );
 }
