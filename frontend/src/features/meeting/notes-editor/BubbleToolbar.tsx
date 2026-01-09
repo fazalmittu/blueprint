@@ -1,5 +1,5 @@
 import type { Editor } from "@tiptap/react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 
 interface BubbleToolbarProps {
   editor: Editor;
@@ -29,6 +29,54 @@ interface ToolbarButton {
  */
 export function BubbleToolbar({ editor, onSetLink }: BubbleToolbarProps) {
   const [showHeadingMenu, setShowHeadingMenu] = useState(false);
+  const [currentHeadingLevel, setCurrentHeadingLevel] = useState(0);
+
+  // Update heading level when selection changes
+  useEffect(() => {
+    const updateHeadingLevel = () => {
+      const level = 
+        editor.isActive("heading", { level: 1 }) ? 1 :
+        editor.isActive("heading", { level: 2 }) ? 2 :
+        editor.isActive("heading", { level: 3 }) ? 3 : 0;
+      setCurrentHeadingLevel(level);
+    };
+
+    // Update immediately
+    updateHeadingLevel();
+
+    // Listen to selection and transaction updates
+    editor.on("selectionUpdate", updateHeadingLevel);
+    editor.on("transaction", updateHeadingLevel);
+
+    return () => {
+      editor.off("selectionUpdate", updateHeadingLevel);
+      editor.off("transaction", updateHeadingLevel);
+    };
+  }, [editor]);
+
+  // Close heading menu when clicking outside
+  useEffect(() => {
+    if (!showHeadingMenu) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't close if clicking inside the heading menu or selector
+      if (target.closest(".heading-selector") || target.closest(".heading-menu")) {
+        return;
+      }
+      setShowHeadingMenu(false);
+    };
+
+    // Add listener after a small delay to prevent immediate close
+    const timeout = setTimeout(() => {
+      document.addEventListener("mousedown", handleClickOutside);
+    }, 50);
+
+    return () => {
+      clearTimeout(timeout);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showHeadingMenu]);
 
   const toggleHeading = useCallback((level: 1 | 2 | 3) => {
     editor.chain().focus().toggleHeading({ level }).run();
@@ -87,18 +135,17 @@ export function BubbleToolbar({ editor, onSetLink }: BubbleToolbarProps) {
     },
   ];
 
-  const currentHeadingLevel = 
-    editor.isActive("heading", { level: 1 }) ? 1 :
-    editor.isActive("heading", { level: 2 }) ? 2 :
-    editor.isActive("heading", { level: 3 }) ? 3 : 0;
-
   return (
     <div className="bubble-toolbar">
       {/* Heading selector */}
       <div className="heading-selector">
         <button
           className={`toolbar-btn heading-btn ${currentHeadingLevel > 0 ? "active" : ""}`}
-          onClick={() => setShowHeadingMenu(!showHeadingMenu)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowHeadingMenu((prev) => !prev);
+          }}
           title="Heading"
         >
           <span className="heading-label">
@@ -110,7 +157,7 @@ export function BubbleToolbar({ editor, onSetLink }: BubbleToolbarProps) {
         {showHeadingMenu && (
           <div className="heading-menu">
             <button
-              className={`heading-option ${!currentHeadingLevel ? "active" : ""}`}
+              className={`heading-option ${currentHeadingLevel === 0 ? "active" : ""}`}
               onClick={() => {
                 editor.chain().focus().setParagraph().run();
                 setShowHeadingMenu(false);
@@ -234,4 +281,3 @@ function ChevronIcon() {
     </svg>
   );
 }
-
