@@ -89,59 +89,78 @@ const commands: CommandItem[] = [
 interface CommandListProps {
   items: CommandItem[];
   command: (item: CommandItem) => void;
+  query: string;
 }
 
 interface CommandListRef {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
+  updateQuery: (query: string) => void;
 }
 
 const CommandList = forwardRef<CommandListRef, CommandListProps>(
-  ({ items, command }, ref) => {
+  ({ items: initialItems, command, query: initialQuery }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const [query, setQuery] = useState(initialQuery);
+    
+    // Filter items based on query
+    const filteredItems = query
+      ? commands.filter(
+          (item) =>
+            item.title.toLowerCase().includes(query.toLowerCase()) ||
+            item.description.toLowerCase().includes(query.toLowerCase())
+        )
+      : initialItems;
 
     useEffect(() => {
       setSelectedIndex(0);
-    }, [items]);
+    }, [query]);
 
     const selectItem = useCallback((index: number) => {
-      const item = items[index];
+      const item = filteredItems[index];
       if (item) {
         command(item);
       }
-    }, [items, command]);
+    }, [filteredItems, command]);
 
     useImperativeHandle(ref, () => ({
       onKeyDown: ({ event }: { event: KeyboardEvent }) => {
         if (event.key === "ArrowUp") {
-          setSelectedIndex((prev) => (prev - 1 + items.length) % items.length);
+          setSelectedIndex((prev) => (prev - 1 + filteredItems.length) % filteredItems.length);
           return true;
         }
 
         if (event.key === "ArrowDown") {
-          setSelectedIndex((prev) => (prev + 1) % items.length);
+          setSelectedIndex((prev) => (prev + 1) % filteredItems.length);
           return true;
         }
 
         if (event.key === "Enter") {
-          selectItem(selectedIndex);
+          if (filteredItems.length > 0) {
+            selectItem(selectedIndex);
+          }
           return true;
         }
 
         return false;
       },
+      updateQuery: (newQuery: string) => {
+        setQuery(newQuery);
+      },
     }));
 
-    if (items.length === 0) {
+    if (filteredItems.length === 0) {
       return (
-        <div className="slash-menu-empty">
-          No results
+        <div className="slash-menu">
+          <div className="slash-menu-empty">
+            No results
+          </div>
         </div>
       );
     }
 
     return (
       <div className="slash-menu">
-        {items.map((item, index) => (
+        {filteredItems.map((item, index) => (
           <button
             key={item.title}
             className={`slash-menu-item ${index === selectedIndex ? "selected" : ""}`}
@@ -200,6 +219,7 @@ export const SlashCommand = Extension.create({
 let currentPopup: TippyInstance | null = null;
 let currentRenderer: ReactRenderer | null = null;
 let slashPosition: number | null = null;
+let currentQuery: string = "";
 
 function showCommandMenu(editor: any, coords: { left: number; top: number }, position: number) {
   // Clean up any existing popup
@@ -207,17 +227,20 @@ function showCommandMenu(editor: any, coords: { left: number; top: number }, pos
   
   // Store the position where "/" was typed
   slashPosition = position;
+  currentQuery = "";
 
   const component = new ReactRenderer(CommandList, {
     props: {
       items: commands,
+      query: "",
       command: (item: CommandItem) => {
-        // Delete the "/" character using stored position
+        // Delete the "/" character AND any query text using stored position
         if (slashPosition !== null) {
+          const deleteEnd = slashPosition + currentQuery.length;
           editor
             .chain()
             .focus()
-            .deleteRange({ from: slashPosition - 1, to: slashPosition })
+            .deleteRange({ from: slashPosition - 1, to: deleteEnd })
             .run();
         }
         
@@ -257,7 +280,7 @@ function showCommandMenu(editor: any, coords: { left: number; top: number }, pos
     duration: [200, 150],
   });
 
-  // Handle keyboard navigation
+  // Handle keyboard navigation and text input
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Escape") {
       hideCommandMenu();
@@ -265,16 +288,46 @@ function showCommandMenu(editor: any, coords: { left: number; top: number }, pos
       return;
     }
 
+    // Handle backspace - update query or close if query is empty
+    if (event.key === "Backspace") {
+      if (currentQuery.length > 0) {
+        currentQuery = currentQuery.slice(0, -1);
+        component.ref?.updateQuery?.(currentQuery);
+      } else {
+        // Query is empty and user pressed backspace - close menu
+        hideCommandMenu();
+      }
+      return;
+    }
+
+    // Handle arrow keys and enter
     if (component.ref?.onKeyDown?.({ event })) {
       event.preventDefault();
+      return;
+    }
+
+    // Handle text input (single printable characters)
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      currentQuery += event.key;
+      component.ref?.updateQuery?.(currentQuery);
     }
   };
 
   document.addEventListener("keydown", handleKeyDown);
 
+  // Also listen for clicks outside to close
+  const handleClickOutside = (event: MouseEvent) => {
+    if (currentPopup && !currentPopup.popper.contains(event.target as Node)) {
+      hideCommandMenu();
+    }
+  };
+
+  document.addEventListener("mousedown", handleClickOutside);
+
   // Store cleanup function
   (currentPopup as any)._cleanup = () => {
     document.removeEventListener("keydown", handleKeyDown);
+    document.removeEventListener("mousedown", handleClickOutside);
   };
 }
 
@@ -289,6 +342,7 @@ function hideCommandMenu() {
     currentRenderer = null;
   }
   slashPosition = null;
+  currentQuery = "";
 }
 
 // Icons
@@ -389,4 +443,3 @@ function DividerIcon() {
     </svg>
   );
 }
-
