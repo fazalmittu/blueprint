@@ -570,6 +570,14 @@ def register_routes(app):
         if not updated_state:
             return jsonify({'error': 'Failed to update summary'}), 500
         
+        # Re-index meeting notes for search
+        try:
+            from search.indexer import SearchIndexer
+            indexer = SearchIndexer()
+            indexer.index_meeting_notes(meeting_id, new_summary)
+        except Exception as e:
+            print(f"Warning: Failed to index meeting notes for {meeting_id}: {e}")
+        
         return jsonify({
             'success': True,
             'meetingSummary': new_summary
@@ -645,6 +653,14 @@ def register_routes(app):
         updated_state = db.update_latest_state_summary(meeting_id, document)
         if not updated_state:
             return jsonify({'error': 'Failed to save document'}), 500
+        
+        # Index the generated meeting notes for search
+        try:
+            from search.indexer import SearchIndexer
+            indexer = SearchIndexer()
+            indexer.index_meeting_notes(meeting_id, document)
+        except Exception as e:
+            print(f"Warning: Failed to index generated document for {meeting_id}: {e}")
         
         return jsonify({
             'success': True,
@@ -796,6 +812,122 @@ def register_routes(app):
             'newVersion': new_state_version.version
         }), 200
 
+    # ==================== SEARCH ENDPOINTS ====================
+
+    @app.route('/org/<org_id>/search', methods=['POST'])
+    def org_search(org_id: str):
+        """
+        Search across all meetings in an organization.
+        
+        Request Body:
+            query (str): The search query
+            strategy (str, optional): Strategy to use (default: "title_first")
+            top_k (int, optional): Max sources to consider (default: 5)
+        
+        Returns:
+            SearchResult with answer, sources, and debug info
+        """
+        data = request.get_json()
+        if not data or 'query' not in data:
+            return jsonify({'error': 'query is required'}), 400
+        
+        query = data['query']
+        strategy_name = data.get('strategy', None)
+        top_k = data.get('top_k', 5)
+        
+        try:
+            from search.service import get_search_service
+            service = get_search_service()
+            result = service.search(
+                query=query,
+                org_id=org_id,
+                strategy_name=strategy_name,
+                top_k=top_k
+            )
+            
+            # Convert dataclass to dict for JSON serialization
+            return jsonify({
+                'answer': result.answer,
+                'sources': [
+                    {
+                        'meeting_id': s.meeting_id,
+                        'meeting_title': s.meeting_title,
+                        'doc_type': s.doc_type,
+                        'text_snippet': s.text_snippet[:200] if s.text_snippet else '',
+                        'score': s.score,
+                        'source_id': s.source_id,
+                    }
+                    for s in result.sources
+                ],
+                'strategy_used': result.strategy_used,
+                'success': result.success,
+                'error': result.error,
+                'debug_info': result.debug_info
+            }), 200
+            
+        except Exception as e:
+            return jsonify({
+                'error': str(e),
+                'answer': '',
+                'sources': [],
+                'success': False
+            }), 500
+
+    @app.route('/org/<org_id>/search/strategies', methods=['GET'])
+    def get_search_strategies(org_id: str):
+        """
+        Get available search strategies.
+        
+        Returns:
+            List of strategy configurations
+        """
+        try:
+            from search.service import get_search_service
+            service = get_search_service()
+            strategies = service.get_available_strategies()
+            return jsonify({'strategies': strategies}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/org/<org_id>/search/stats', methods=['GET'])
+    def get_search_stats(org_id: str):
+        """
+        Get search index statistics.
+        
+        Returns:
+            Index statistics and health info
+        """
+        try:
+            from search.service import get_search_service
+            service = get_search_service()
+            health = service.health_check()
+            return jsonify(health), 200
+        except Exception as e:
+            return jsonify({'error': str(e), 'status': 'unhealthy'}), 500
+
+    @app.route('/meeting/<meeting_id>/reindex', methods=['POST'])
+    def reindex_meeting(meeting_id: str):
+        """
+        Reindex a meeting for search.
+        
+        Useful if the meeting was created before search was enabled,
+        or if you need to rebuild the index.
+        
+        Returns:
+            Indexing results
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        try:
+            from search.indexer import SearchIndexer
+            indexer = SearchIndexer()
+            result = indexer.reindex_meeting(meeting_id)
+            return jsonify(result), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
 
 def broadcast_to_meeting(meeting_id: str, message: dict):
     """Broadcast a message to all SSE connections for a meeting."""
@@ -858,6 +990,15 @@ def process_transcript_chunks(meeting_id: str, chunks: list[str]):
     
     # Update meeting status to finalized
     db.update_meeting_status(meeting_id, Status.finalized)
+    
+    # Index the meeting for search
+    try:
+        from search.indexer import SearchIndexer
+        indexer = SearchIndexer()
+        index_result = indexer.index_meeting_complete(meeting_id)
+        print(f"Indexed meeting {meeting_id}: {index_result}")
+    except Exception as e:
+        print(f"Warning: Failed to index meeting {meeting_id}: {e}")
     
     # Notify processing complete with the generated title
     broadcast_to_meeting(meeting_id, {

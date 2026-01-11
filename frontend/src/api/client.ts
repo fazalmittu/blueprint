@@ -407,3 +407,109 @@ export async function sendChatMessage(
   }
   return res.json();
 }
+
+// ==================== SEARCH ENDPOINTS ====================
+
+export interface SearchSource {
+  meeting_id: string;
+  meeting_title: string;
+  doc_type: string;
+  text_snippet: string;
+  score: number;
+  source_id?: string;
+}
+
+export interface SearchResponse {
+  answer: string;
+  sources: SearchSource[];
+  strategy_used: string;
+  success: boolean;
+  error?: string;
+  debug_info?: Record<string, unknown>;
+}
+
+export interface SearchStrategy {
+  name: string;
+  description: string;
+  [key: string]: unknown;
+}
+
+export interface SearchStatsResponse {
+  status: string;
+  total_documents?: number;
+  strategies_available?: string[];
+  default_strategy?: string;
+  index_stats?: Record<string, { document_count: number; index_size: number }>;
+  error?: string;
+}
+
+/**
+ * Search across all meetings in an organization.
+ */
+export async function searchOrg(
+  orgId: string,
+  query: string,
+  options?: {
+    strategy?: string;
+    top_k?: number;
+  }
+): Promise<SearchResponse> {
+  const res = await fetch(
+    `${API_BASE}/org/${encodeURIComponent(orgId)}/search`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query,
+        strategy: options?.strategy,
+        top_k: options?.top_k,
+      }),
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Search failed" }));
+    throw new Error(error.error || "Search failed");
+  }
+  return res.json();
+}
+
+/**
+ * Get available search strategies.
+ */
+export async function getSearchStrategies(orgId: string): Promise<{ strategies: SearchStrategy[] }> {
+  const res = await fetch(
+    `${API_BASE}/org/${encodeURIComponent(orgId)}/search/strategies`
+  );
+  if (!res.ok) {
+    throw new Error("Failed to fetch search strategies");
+  }
+  return res.json();
+}
+
+/**
+ * Get search index statistics.
+ */
+export async function getSearchStats(orgId: string): Promise<SearchStatsResponse> {
+  const res = await fetch(
+    `${API_BASE}/org/${encodeURIComponent(orgId)}/search/stats`
+  );
+  if (!res.ok) {
+    throw new Error("Failed to fetch search stats");
+  }
+  return res.json();
+}
+
+/**
+ * Reindex a meeting for search.
+ */
+export async function reindexMeeting(meetingId: string): Promise<{ meeting_id: string; [key: string]: unknown }> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/reindex`,
+    { method: "POST" }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Reindex failed" }));
+    throw new Error(error.error || "Reindex failed");
+  }
+  return res.json();
+}
