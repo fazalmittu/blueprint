@@ -7,10 +7,12 @@ based on the indexed meeting data.
 
 from .base import SearchStrategy, SearchResult, SourceReference
 from .title_first import TitleFirstStrategy
+from .agentic_rag import AgenticRAGStrategy
 
 __all__ = [
     "SearchStrategy",
     "SearchResult", 
     "SourceReference",
     "TitleFirstStrategy",
+    "AgenticRAGStrategy",
 ]
