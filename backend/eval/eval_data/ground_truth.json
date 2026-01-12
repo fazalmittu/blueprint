@@ -1,0 +1,43 @@
+{
+  "name": "simple-3-questions",
+  "description": "Simple 3-question test dataset for initial eval",
+  "version": "1.0",
+  "test_cases": [
+    {
+      "id": "tc_001",
+      "query": "What was discussed about the API v2 launch?",
+      "org_id": "acme-corp",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:491e310d-7ca0-40ea-b586-4e9be5a25f9d:",
+          "relevance": 2
+        }
+      ],
+      "tags": ["api", "engineering"]
+    },
+    {
+      "id": "tc_002",
+      "query": "What is the fundraising strategy?",
+      "org_id": "startup-inc",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:c1c46cb7-00c4-4927-8adf-54a95715601e:",
+          "relevance": 2
+        }
+      ],
+      "tags": ["fundraising", "strategy"]
+    },
+    {
+      "id": "tc_003",
+      "query": "What happened during the production outage?",
+      "org_id": "enterprise-solutions",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:f3a20345-caf7-4871-b7d5-c26e325b4239:",
+          "relevance": 2
+        }
+      ],
+      "tags": ["outage", "incident"]
+    }
+  ]
+}
