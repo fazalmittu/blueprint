@@ -14,6 +14,41 @@ import { SearchResults } from "./SearchResults";
 
 type Meeting = MeetingsResponse["meetings"][number];
 
+const SEARCH_STORAGE_KEY = "blueprint_search_state";
+
+interface PersistedSearchState {
+  query: string;
+  result: SearchResponse;
+}
+
+function saveSearchState(query: string, result: SearchResponse) {
+  try {
+    sessionStorage.setItem(SEARCH_STORAGE_KEY, JSON.stringify({ query, result }));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function loadSearchState(): PersistedSearchState | null {
+  try {
+    const stored = sessionStorage.getItem(SEARCH_STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored) as PersistedSearchState;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null;
+}
+
+function clearSearchState() {
+  try {
+    sessionStorage.removeItem(SEARCH_STORAGE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export function Home() {
   const navigate = useNavigate();
   const [orgId, setOrgId] = useState<string | null>(null);
@@ -22,10 +57,16 @@ export function Home() {
   const [error, setError] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   
-  // Search state
+  // Search state - initialize from sessionStorage if available
   const [isSearching, setIsSearching] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResult, setSearchResult] = useState<SearchResponse | null>(null);
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const saved = loadSearchState();
+    return saved?.query ?? "";
+  });
+  const [searchResult, setSearchResult] = useState<SearchResponse | null>(() => {
+    const saved = loadSearchState();
+    return saved?.result ?? null;
+  });
   const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,7 +107,10 @@ export function Home() {
       const result = await searchOrg(orgId, query);
       setSearchResult(result);
       
-      if (!result.success && result.error) {
+      if (result.success) {
+        // Persist successful search results to sessionStorage
+        saveSearchState(query, result);
+      } else if (result.error) {
         setSearchError(result.error);
       }
     } catch (e) {
@@ -81,6 +125,7 @@ export function Home() {
     setSearchResult(null);
     setSearchQuery("");
     setSearchError(null);
+    clearSearchState();
   }, []);
 
   if (loading) {
@@ -122,6 +167,7 @@ export function Home() {
             onSearch={handleSearch} 
             isLoading={isSearching}
             placeholder="Ask anything about your meetings..."
+            initialQuery={searchQuery}
           />
           
           {searchError && (
