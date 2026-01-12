@@ -32,9 +32,27 @@ def main():
         default=None,
         help="top_k passed into strategies (default=max K)",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit number of test cases to run (for quick testing)",
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Print verbose output during evaluation",
+    )
     args = parser.parse_args()
 
     dataset = EvalDataset.load(args.dataset)
+    
+    # Apply limit if specified
+    if args.limit:
+        dataset.test_cases = dataset.test_cases[:args.limit]
+        print(f"📊 Running with {len(dataset.test_cases)} test cases (limited)")
+    else:
+        print(f"📊 Running with {len(dataset.test_cases)} test cases")
     result = evaluate_strategies(
         dataset=dataset,
         strategy_names=args.strategies,
