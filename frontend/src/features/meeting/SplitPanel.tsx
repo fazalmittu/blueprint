@@ -141,7 +141,7 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
           setSplitTabs([dragState.tabId, otherTab.id]);
         } else {
           // Cursor on right: dragged tab goes to right panel
-          setSplitTabs([otherTab.id, dragState.tabId]);
+        setSplitTabs([otherTab.id, dragState.tabId]);
         }
         // Reset to exactly 50/50 split
         setSplitRatio(0.5);
@@ -303,12 +303,12 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
               style={{
                 height: "100%",
                 width: dropZoneSide ? "50%" : "100%",
-                overflow: "auto",
+              overflow: "auto",
                 transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
                 flexShrink: 0,
-              }}
-            >
-              {getTabContent(activeTab || tabs[0]?.id)}
+            }}
+          >
+            {getTabContent(activeTab || tabs[0]?.id)}
             </div>
           </div>
         ) : (
@@ -485,16 +485,16 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
         )}
 
         {/* Drop zone indicator - shows on left or right based on drag direction */}
-        <div
-          style={{
+          <div
+            style={{
             position: "absolute",
             top: 0,
             bottom: 0,
             left: 0,
-            width: "50%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+              width: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             borderLeft: dropZoneSide === "right" ? "2px dashed rgba(59, 130, 246, 0.6)" : "none",
             borderRight: dropZoneSide === "left" ? "2px dashed rgba(59, 130, 246, 0.6)" : "none",
             animation: dropZoneSide ? "dropZonePulse 1.2s ease-in-out infinite" : "none",
@@ -502,8 +502,8 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
             pointerEvents: dropZoneSide ? "auto" : "none",
             transition: "opacity 0.2s ease-out, transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
             transform: dropZoneSide === "right" ? "translateX(100%)" : "translateX(0)",
-          }}
-        >
+            }}
+          >
           {dropZoneSide && (
             <>
             {/* Pulsing corners */}
@@ -547,7 +547,7 @@ export function SplitPanel({ tabs, defaultTabId, onTabChange, activeTabId }: Spl
             </div>
             </>
           )}
-        </div>
+          </div>
       </div>
     </div>
   );

@@ -304,14 +304,14 @@ function MeetingContent({
       >
         {/* Left section: back + title + status */}
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", minWidth: 0 }}>
-          <button
-            onClick={() => navigate("/")}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
+        <button
+          onClick={() => navigate("/")}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
               justifyContent: "center",
               width: 32,
               height: 32,
@@ -332,7 +332,7 @@ function MeetingContent({
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
-          </button>
+        </button>
           
           <div style={{ width: 1, height: 16, background: "var(--border-subtle)" }} />
           
@@ -395,11 +395,11 @@ function MeetingContent({
         </div>
 
         {/* Right section: chat toggle */}
-        <button
-          onClick={() => setIsChatOpen(!isChatOpen)}
-          style={{
-            display: "flex",
-            alignItems: "center",
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            style={{
+              display: "flex",
+              alignItems: "center",
             justifyContent: "center",
             width: 34,
             height: 34,
@@ -407,9 +407,9 @@ function MeetingContent({
             color: isChatOpen ? "white" : "var(--text-muted)",
             border: isChatOpen ? "none" : "1px solid var(--border-subtle)",
             borderRadius: "var(--radius-sm)",
-            cursor: "pointer",
-            transition: "var(--transition-fast)",
-          }}
+              cursor: "pointer",
+              transition: "var(--transition-fast)",
+            }}
           onMouseEnter={(e) => {
             if (!isChatOpen) {
               e.currentTarget.style.background = "var(--bg-tertiary)";
@@ -425,20 +425,20 @@ function MeetingContent({
             }
           }}
           title={isChatOpen ? "Close assistant" : "Open AI assistant"}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-          >
+            >
             <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-          </svg>
-        </button>
+            </svg>
+          </button>
       </div>
 
       {/* Main content area */}
