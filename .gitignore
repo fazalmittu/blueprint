@@ -1,8 +1,3 @@
 venv/
 .env
-__pycache__/
-
-# Database and search indices - committed once, then ignored
-backend/data/blueprint.db
-backend/data/faiss/*.index
-backend/data/faiss/*.db 
+__pycache__/ 
