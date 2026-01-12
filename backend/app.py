@@ -23,6 +23,8 @@ from prompts.chunk_processing import CHUNK_PROCESSING_SYSTEM_PROMPT, get_chunk_p
 from dotenv import load_dotenv
 from pathlib import Path
 import database as db
+from search.embeddings import EmbeddingService
+from search.vector_store import VectorStore
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -1198,6 +1200,80 @@ def process_with_llm(current_state_data: CurrentStateData, chunk: str, version: 
     return updated_state
 
 
+def get_relevant_transcript_chunks(
+    query: str,
+    meeting_id: str,
+    org_id: str,
+    max_chunks: int = 5
+) -> list[dict]:
+    """
+    Search for relevant transcript chunks from a specific meeting using RAG.
+    
+    Args:
+        query: The user's question/message to find relevant chunks for
+        meeting_id: The specific meeting to search within
+        org_id: The organization ID
+        max_chunks: Maximum number of chunks to return
+        
+    Returns:
+        List of dicts with 'text', 'chunk_index', and 'score'
+    """
+    try:
+        embedding_service = EmbeddingService()
+        vector_store = VectorStore()
+        
+        # Generate embedding for the query
+        query_embedding = embedding_service.embed(query)
+        
+        # Search for transcript chunks (get more than needed to filter by meeting)
+        hits = vector_store.search(
+            doc_type="transcript_chunk",
+            query_embedding=query_embedding,
+            k=max_chunks * 3,  # Get extra to filter
+            org_id=org_id
+        )
+        
+        # Filter to only chunks from this specific meeting
+        meeting_chunks = []
+        for hit in hits:
+            if hit.meeting_id == meeting_id:
+                meeting_chunks.append({
+                    'text': hit.text,
+                    'chunk_index': hit.source_id,
+                    'score': hit.score
+                })
+                if len(meeting_chunks) >= max_chunks:
+                    break
+        
+        return meeting_chunks
+        
+    except Exception as e:
+        print(f"Error searching transcript chunks: {e}")
+        return []
+
+
+# Tool definition for requesting full transcript
+CHAT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_full_transcript",
+            "description": (
+                "Retrieve the complete transcript for this meeting. Use this ONLY when "
+                "the provided transcript excerpts are insufficient to answer the user's "
+                "question accurately, or when the user explicitly asks about something "
+                "that requires the full context of the conversation."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    }
+]
+
+
 def process_chat_message(
     user_message: str,
     history: list,
@@ -1206,7 +1282,12 @@ def process_chat_message(
     meeting_id: str
 ) -> dict:
     """
-    Process a chat message with the meeting context.
+    Process a chat message with the meeting context, using RAG for transcript access.
+    
+    This function:
+    1. Uses RAG to find relevant transcript chunks based on the user's message
+    2. Provides the model with meeting summary, workflows, and relevant transcript excerpts
+    3. Allows the model to request the full transcript via tool calling if needed
     
     Args:
         user_message: The user's message
@@ -1218,6 +1299,10 @@ def process_chat_message(
     Returns:
         dict with 'message' (response) and optional 'action' (workflow/summary update)
     """
+    # Get the meeting to access org_id
+    meeting = db.get_meeting(meeting_id)
+    org_id = meeting.orgId if meeting else "default"
+    
     # Build the context about the meeting
     workflows_context = []
     for wf in workflows:
@@ -1229,6 +1314,34 @@ def process_chat_message(
             'edges': wf_dict.get('edges', [])
         })
     
+    # Use RAG to find relevant transcript chunks based on the user's message
+    relevant_chunks = get_relevant_transcript_chunks(
+        query=user_message,
+        meeting_id=meeting_id,
+        org_id=org_id,
+        max_chunks=5
+    )
+    
+    # Debug: Print retrieved chunks
+    print(f"\n{'='*60}")
+    print(f"[CHAT DEBUG] Meeting: {meeting_id}")
+    print(f"[CHAT DEBUG] User message: {user_message[:100]}{'...' if len(user_message) > 100 else ''}")
+    print(f"[CHAT DEBUG] Retrieved {len(relevant_chunks)} transcript chunks via RAG:")
+    for i, chunk in enumerate(relevant_chunks, 1):
+        preview = chunk['text'][:150].replace('\n', ' ')
+        print(f"  Chunk {i} (score: {chunk['score']:.3f}): {preview}...")
+    print(f"{'='*60}\n")
+    
+    # Format relevant transcript excerpts
+    transcript_context = ""
+    if relevant_chunks:
+        transcript_excerpts = []
+        for i, chunk in enumerate(relevant_chunks, 1):
+            transcript_excerpts.append(f"[Excerpt {i}]\n{chunk['text']}")
+        transcript_context = "\n\n".join(transcript_excerpts)
+    else:
+        transcript_context = "(No relevant transcript excerpts found)"
+    
     system_prompt = f"""You are a helpful meeting assistant. You have access to the following meeting context:
 
 ## Meeting Summary
@@ -1237,10 +1350,17 @@ def process_chat_message(
 ## Workflows
 {json.dumps(workflows_context, indent=2) if workflows_context else "(No workflows yet)"}
 
+## Relevant Transcript Excerpts
+The following are the most relevant parts of the meeting transcript based on the user's question:
+
+{transcript_context}
+
 You can help the user by:
 1. **Summarizing** the meeting notes or specific parts
-2. **Answering questions** about the meeting content
+2. **Answering questions** about the meeting content (using the transcript excerpts provided)
 3. **Editing workflows** - adding, modifying, or removing steps
+
+If the transcript excerpts above don't contain enough information to answer a question about specific details from the meeting, you can use the get_full_transcript tool to access the complete transcript. Only use this when truly necessary, as it's an expensive operation.
 
 When the user asks you to edit a workflow, you should return a JSON action in your response.
 
@@ -1282,15 +1402,72 @@ Be conversational and helpful. If you're not performing an action, set action to
     messages.append({"role": "user", "content": user_message})
     
     try:
+        # First call with tools available
         response = client.chat.completions.create(
             model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
             messages=messages,
+            tools=CHAT_TOOLS,
+            tool_choice="auto",
             temperature=0.7,
-            response_format={"type": "json_object"}
         )
         
-        raw_content = response.choices[0].message.content
-        result = json.loads(raw_content)
+        message = response.choices[0].message
+        
+        # Check if the model wants to use the full transcript
+        if message.tool_calls:
+            for tool_call in message.tool_calls:
+                if tool_call.function.name == "get_full_transcript":
+                    print(f"\n{'='*60}")
+                    print(f"[CHAT DEBUG] Model requested FULL TRANSCRIPT")
+                    print(f"[CHAT DEBUG] This means RAG chunks were insufficient")
+                    print(f"{'='*60}\n")
+                    
+                    # Fetch the full transcript
+                    full_transcript = meeting.transcript if meeting and meeting.transcript else "(No transcript available)"
+                    
+                    # Truncate if extremely long (preserve context window)
+                    max_transcript_len = 30000
+                    truncated = len(full_transcript) > max_transcript_len
+                    if truncated:
+                        full_transcript = full_transcript[:max_transcript_len] + "\n\n[Transcript truncated for length...]"
+                    
+                    print(f"[CHAT DEBUG] Full transcript length: {len(full_transcript)} chars {'(truncated)' if truncated else ''}")
+                    
+                    # Add the tool result to messages
+                    messages.append(message)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": f"Full Meeting Transcript:\n\n{full_transcript}"
+                    })
+                    
+                    # Make a second call with the full transcript
+                    response = client.chat.completions.create(
+                        model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
+                        messages=messages,
+                        temperature=0.7,
+                        response_format={"type": "json_object"}
+                    )
+                    message = response.choices[0].message
+                    break
+        
+        # Parse the final response
+        raw_content = message.content
+        
+        # Handle case where model didn't use tools and just responded
+        if raw_content:
+            try:
+                result = json.loads(raw_content)
+            except json.JSONDecodeError:
+                # If not valid JSON, wrap it
+                result = {"message": raw_content, "action": None}
+        else:
+            result = {"message": "I apologize, but I could not generate a response.", "action": None}
+        
+        # Debug: Print response summary
+        response_preview = result.get('message', '')[:100]
+        print(f"\n[CHAT DEBUG] Response: {response_preview}{'...' if len(result.get('message', '')) > 100 else ''}")
+        print(f"[CHAT DEBUG] Action: {result.get('action')}\n")
         
         return {
             'message': result.get('message', 'I apologize, but I could not generate a response.'),
