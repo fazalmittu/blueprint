@@ -1,43 +1,527 @@
 {
-  "name": "simple-3-questions",
-  "description": "Simple 3-question test dataset for initial eval",
+  "name": "meetingbank-30",
+  "description": "Test dataset from 30 MeetingBank meetings with generated questions",
   "version": "1.0",
+  "generated_at": "2026-01-12T22:13:44.480145Z",
   "test_cases": [
     {
-      "id": "tc_001",
-      "query": "What was discussed about the API v2 launch?",
-      "org_id": "acme-corp",
+      "id": "tc_single_001",
+      "query": "What specific strategies for public engagement were highlighted during the presentation on the Climate Action and Adaptation Plan?",
+      "org_id": "eval-org",
       "relevant_docs": [
         {
-          "doc_id": "meeting_title:491e310d-7ca0-40ea-b586-4e9be5a25f9d:",
+          "doc_id": "meeting_title:bcab0bf4-b8f6-4933-a655-1ff64c6c2b99:",
           "relevance": 2
         }
       ],
-      "tags": ["api", "engineering"]
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
     },
     {
-      "id": "tc_002",
-      "query": "What is the fundraising strategy?",
-      "org_id": "startup-inc",
+      "id": "tc_single_002",
+      "query": "What departments and individuals were involved in the development of the city side project mentioned in the meeting?",
+      "org_id": "eval-org",
       "relevant_docs": [
         {
-          "doc_id": "meeting_title:c1c46cb7-00c4-4927-8adf-54a95715601e:",
+          "doc_id": "meeting_title:338565f9-9200-4304-ad3e-35d4a5415808:",
           "relevance": 2
         }
       ],
-      "tags": ["fundraising", "strategy"]
+      "tags": [
+        "single-meeting",
+        "alameda"
+      ]
     },
     {
-      "id": "tc_003",
-      "query": "What happened during the production outage?",
-      "org_id": "enterprise-solutions",
+      "id": "tc_single_003",
+      "query": "What are the guidelines for speakers participating in the public hearing on Council Bill 20-088?",
+      "org_id": "eval-org",
       "relevant_docs": [
         {
-          "doc_id": "meeting_title:f3a20345-caf7-4871-b7d5-c26e325b4239:",
+          "doc_id": "meeting_title:480d82c9-c8fc-4431-b999-7cd5a60de7bb:",
           "relevance": 2
         }
       ],
-      "tags": ["outage", "incident"]
+      "tags": [
+        "single-meeting",
+        "denver"
+      ]
+    },
+    {
+      "id": "tc_single_004",
+      "query": "What recommendations were presented to the City Council regarding the Bluff Erosion Enhancement Project during the meeting?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:7b6efd12-f8c6-45c7-956c-b2eac73123f4:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_005",
+      "query": "What is the significance of the Planning Board's approval for the mixed-use development at 1926 Park Street?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:20766281-a1e1-467c-835d-2ba0a488468f:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "alameda"
+      ]
+    },
+    {
+      "id": "tc_single_006",
+      "query": "What are the key recommendations being discussed for the short-term rental ordinance in Long Beach?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:fd7df1b1-f666-4933-b803-82d9db29ed64:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_007",
+      "query": "What is the goal of the zoo's proposed waste to energy facility and how does it relate to their zero waste objective by 2025?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:47e0f89e-5a32-4387-b2a7-e2d2719825ce:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "denver"
+      ]
+    },
+    {
+      "id": "tc_single_008",
+      "query": "What was the outcome of the vote on Council Bill 16 during the meeting?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:47d414d2-0da3-420a-ae2b-4a29703b2ce3:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "denver"
+      ]
+    },
+    {
+      "id": "tc_single_009",
+      "query": "What specific amendments to the City Charter are being proposed to address Council interference?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:29a01cef-f48d-4545-a77f-b9d672db1c70:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "alameda"
+      ]
+    },
+    {
+      "id": "tc_single_010",
+      "query": "What is the purpose of Council Bill 494 being discussed in the Denver City Council meeting?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:6e884d27-9396-4b05-9f6a-307b4802b488:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "denver"
+      ]
+    },
+    {
+      "id": "tc_single_011",
+      "query": "What demographic information was shared about the immigrant population in Long Beach during the Long Beach Values Act presentation?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:0d4e0114-af48-49dc-a7e3-d68b1bcce6fa:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_012",
+      "query": "What actions are being proposed to address racial equity in Long Beach as part of the framework for reconciliation?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:10e14c04-2b5d-41e3-bd76-15f735119cbc:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_013",
+      "query": "What recommendations were presented by the Public Works team regarding the citywide temporary parklet program?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:1df5d658-1a7d-4fc6-8a6b-82fae7812f8c:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_014",
+      "query": "What recommendations were made regarding the Tenant Assistance Policies during the meeting?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:2a2de653-1eda-452e-b13e-8c55fda22390:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_015",
+      "query": "How many candidates are being recommended as finalists for the two open positions in the Northeast Division of the King County District Court?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:a5961a65-3f39-41c7-9a61-a08b667dfb6d:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "king_county"
+      ]
+    },
+    {
+      "id": "tc_single_016",
+      "query": "What is the purpose of Council Bill 21 1371 being discussed in the Council Hearing on the rezoning proposal for Lowry Boulevard?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:a340760e-b69b-4159-b707-88a55828a2bc:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "denver"
+      ]
+    },
+    {
+      "id": "tc_single_017",
+      "query": "What are the key goals and actions outlined in the Parks and Recreation Department Strategic Plan for the next ten years?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:22d327a6-5a7a-4f5c-8376-ce4d8241b9db:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_018",
+      "query": "What is the recommendation made by Councilman Austin and Councilwoman Mango regarding new cannabis retail licenses in Long Beach?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:1d281b5d-e362-482a-8a0a-3a8c41c47ea9:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_019",
+      "query": "What is the proposed change in zoning for the property at 1208 North Quitman Street, and what are the key features of the new zoning designation?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:9979109c-8ed5-4be7-8cb6-052bf220c5c6:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "denver"
+      ]
+    },
+    {
+      "id": "tc_single_020",
+      "query": "What were some of the key accomplishments and challenges discussed in the budget presentation for the Department of Health and Human Services and Police?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:93dcbbf2-7058-4c6a-9d0a-4c4925c06913:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_021",
+      "query": "What was the purpose of the oath taken at the beginning of the CCP Hearing?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:e2e15c5a-a3d8-47bc-a8c2-78e34bf2475e:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_022",
+      "query": "What budget proposals did Glenda Willie Williams present for the Library Services Department during the meeting?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:5b925594-9401-4e76-baaf-f2e5ed2f6feb:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_023",
+      "query": "What are the main objectives of the Green Terminal Island Transition Plan as discussed in the meeting?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:2f9106e8-cbe7-4e5e-96ec-0ba167c9f506:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_024",
+      "query": "What is the role of Assembly member Bonnie Lowenthal in the study session on affordable and workforce housing?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:701e0cf2-10dc-43c8-bffa-8221c286d72e:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_025",
+      "query": "What are the main challenges related to housing and transportation that the Alameda community is currently facing?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:9e6d2f8d-d729-4ef9-bcc1-7fa339fd9822:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "alameda"
+      ]
+    },
+    {
+      "id": "tc_single_026",
+      "query": "What are the key findings from the Long Beach Innovation Team's report on the nuisance motels pilot program discussed in the council meeting?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:0d0b87fb-1cfd-4e46-b998-e21b01ae660a:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_027",
+      "query": "What specific measures are being proposed to assist commercial tenants at Alameda Point through the rent relief program?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:746388e4-6949-4d30-b75e-5fceca12248a:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "alameda"
+      ]
+    },
+    {
+      "id": "tc_single_028",
+      "query": "What were the key challenges faced by the Health Department during the 2021 budget period as discussed in the meeting?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:855df818-0d69-42a8-b3a1-7e16b6f4ef8c:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_029",
+      "query": "What is the reason for delaying action on the Long Beach Airport customs facility proposal?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:34910c3c-02bb-4c18-8842-06d71b7316d9:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_single_030",
+      "query": "What are the proposed amendments to the ordinance governing second units in Alameda that were discussed during the hearing?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:55bdbb01-8bbf-4861-af4a-b95e3915b641:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "single-meeting",
+        "alameda"
+      ]
+    },
+    {
+      "id": "tc_multi_001",
+      "query": "How did the discussions and decisions regarding Council Bills 16, 17, and 494 reflect the community's input received during the public hearing for Council Bill 20-088?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:480d82c9-c8fc-4431-b999-7cd5a60de7bb:",
+          "relevance": 2
+        },
+        {
+          "doc_id": "meeting_title:47d414d2-0da3-420a-ae2b-4a29703b2ce3:",
+          "relevance": 2
+        },
+        {
+          "doc_id": "meeting_title:6e884d27-9396-4b05-9f6a-307b4802b488:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "multi-meeting",
+        "denver"
+      ]
+    },
+    {
+      "id": "tc_multi_002",
+      "query": "How do the discussions and decisions made in the CCP Hearing, the Citywide Temporary Parklet Program Presentation, and the Study Session on Affordable and Workforce Housing reflect the city's overall strategy for community engagement and urban development?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:e2e15c5a-a3d8-47bc-a8c2-78e34bf2475e:",
+          "relevance": 2
+        },
+        {
+          "doc_id": "meeting_title:1df5d658-1a7d-4fc6-8a6b-82fae7812f8c:",
+          "relevance": 2
+        },
+        {
+          "doc_id": "meeting_title:701e0cf2-10dc-43c8-bffa-8221c286d72e:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "multi-meeting",
+        "long_beach"
+      ]
+    },
+    {
+      "id": "tc_multi_003",
+      "query": "How did the discussions on housing and transportation influence the approval and design of mixed-use developments, such as the one proposed at Park Street?",
+      "org_id": "eval-org",
+      "relevant_docs": [
+        {
+          "doc_id": "meeting_title:9e6d2f8d-d729-4ef9-bcc1-7fa339fd9822:",
+          "relevance": 2
+        },
+        {
+          "doc_id": "meeting_title:20766281-a1e1-467c-835d-2ba0a488468f:",
+          "relevance": 2
+        },
+        {
+          "doc_id": "meeting_title:338565f9-9200-4304-ad3e-35d4a5415808:",
+          "relevance": 2
+        }
+      ],
+      "tags": [
+        "multi-meeting",
+        "alameda"
+      ]
     }
   ]
 }

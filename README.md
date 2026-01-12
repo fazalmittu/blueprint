@@ -62,8 +62,8 @@ echo "APP_URL=http://localhost:5173" >> .env
 echo "HOST=0.0.0.0" >> .env
 echo "PORT=5001" >> .env
 
-# Seed sample data
-cd backend && python seed_db.py && cd ..
+# Database and indices are already committed to git!
+# If you need to regenerate: cd backend && python seed_meetingbank.py
 
 # Frontend
 cd frontend && npm install && cd ..
@@ -89,7 +89,10 @@ blueprint/
 │   ├── app.py          # Flask API + LLM processing logic
 │   ├── database.py     # SQLite operations
 │   ├── models/         # Pydantic models (auto-generated from schemas)
-│   └── seed_db.py      # Sample data seeder
+│   ├── seed_meetingbank.py  # Database seeder (replaces seed_db.py)
+│   ├── data/           # Database and FAISS indices (committed to git)
+│   │   ├── blueprint.db
+│   │   └── faiss/      # Search indices
 ├── frontend/
 │   └── src/
 │       ├── features/meeting/  # Canvas, blocks, real-time updates

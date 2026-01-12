@@ -1,4 +1,3 @@
 venv/
 .env
-__pycache__/
-blueprint.db 
+__pycache__/ 

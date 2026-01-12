@@ -24,6 +24,13 @@ from dotenv import load_dotenv
 from pathlib import Path
 import database as db
 
+# Verify database path is correct
+import os
+if not os.path.exists(db.DB_PATH):
+    print(f"⚠️  Warning: Database not found at {db.DB_PATH}")
+    print(f"   Creating database directory...")
+    os.makedirs(os.path.dirname(db.DB_PATH), exist_ok=True)
+
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -1450,6 +1457,31 @@ def process_full_transcript(transcript: str, verbose: bool = True) -> CurrentSta
 # ==================== MAIN ====================
 
 if __name__ == '__main__':
+    # Verify database and search index paths on startup
+    print(f"📁 Database path: {db.DB_PATH}")
+    print(f"   Database exists: {os.path.exists(db.DB_PATH)}")
+    
+    try:
+        from search.vector_store import DATA_DIR as FAISS_DIR
+        print(f"📁 FAISS index directory: {FAISS_DIR}")
+        print(f"   FAISS directory exists: {os.path.exists(FAISS_DIR)}")
+        
+        # Check if indices exist
+        from search.vector_store import DOC_TYPES
+        index_files = []
+        for doc_type in DOC_TYPES:
+            index_path = FAISS_DIR / f"{doc_type}.index"
+            if index_path.exists():
+                index_files.append(doc_type)
+        if index_files:
+            print(f"   Found {len(index_files)} index files: {', '.join(index_files)}")
+        else:
+            print(f"   ⚠️  No index files found (run seed_meetingbank.py to create indices)")
+    except Exception as e:
+        print(f"   ⚠️  Could not verify FAISS indices: {e}")
+    
+    print()
+    
     app = create_app()
     host = os.getenv('HOST', '0.0.0.0')
     port = int(os.getenv('PORT', '5001'))

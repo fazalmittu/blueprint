@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """
+⚠️ DEPRECATED: This script is kept for reference but is no longer the primary seeding method.
+
+For evaluation purposes, use the MeetingBank-based seed data instead:
+    python seed_meetingbank.py
+
+This creates a comprehensive test dataset for evaluating the search system.
+
+---
+
+Original description:
 Database seeding script with full indexing support.
 Clears existing database and populates it with rich test data including:
 - Meeting transcripts
 - Meeting summaries
 - Workflows with detailed nodes/edges
 - Full search indexing
-
-This creates a comprehensive test dataset for evaluating the search system.
 """
 import os
 import sys

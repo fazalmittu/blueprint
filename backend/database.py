@@ -13,8 +13,10 @@ from models.currentStateVersion_schema import Data as CurrentStateData
 from models.workflow_schema import Model as Workflow, Node, Edge, Type as NodeType, Variant as NodeVariant
 
 
-# Database file path (in project root, outside backend folder)
-DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'blueprint.db')
+# Database file path (in data directory, committed to git)
+DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, 'blueprint.db')
 
 
 def get_connection() -> sqlite3.Connection:
