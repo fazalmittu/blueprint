@@ -3,4 +3,7 @@ venv/
 __pycache__/
 
 # macOS
-.DS_Store 
+.DS_Store
+
+# Eval results - generated output that shouldn't be committed
+backend/eval/results/ 
