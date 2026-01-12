@@ -46,4 +46,12 @@ git update-index --skip-worktree backend/data/blueprint.db backend/data/faiss/*.
 
 When someone clones this repo, they **will** get these database files automatically. The files are part of the repository and will be downloaded with `git clone`.
 
-The `--skip-worktree` flag is only set locally after cloning - it's not stored in the repository itself.
+**⚠️ Important: New clones must set up protection**
+
+After cloning, run this command to protect the database files from accidental commits:
+
+```bash
+git update-index --skip-worktree backend/data/blueprint.db backend/data/faiss/*.index backend/data/faiss/*.db
+```
+
+Without this, `git add .` will include database changes in commits. The `--skip-worktree` flag is only set locally and not stored in the repository.
