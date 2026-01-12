@@ -4,14 +4,15 @@ interface SearchBarProps {
   onSearch: (query: string) => void;
   isLoading?: boolean;
   placeholder?: string;
+  initialQuery?: string;
 }
 
 /**
  * Global search bar for org-wide search.
  * Features keyboard shortcut (Cmd+K) and loading state.
  */
-export function SearchBar({ onSearch, isLoading = false, placeholder }: SearchBarProps) {
-  const [query, setQuery] = useState("");
+export function SearchBar({ onSearch, isLoading = false, placeholder, initialQuery = "" }: SearchBarProps) {
+  const [query, setQuery] = useState(initialQuery);
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 

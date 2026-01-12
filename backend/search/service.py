@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from .strategies.base import SearchStrategy, SearchResult
 from .strategies.title_first import TitleFirstStrategy
+from .strategies.agentic_rag import AgenticRAGStrategy
 from .vector_store import VectorStore
 
 
@@ -27,7 +28,7 @@ class SearchService:
     
     def __init__(self):
         self._strategies: dict[str, SearchStrategy] = {}
-        self._default_strategy: str = "title_first"
+        self._default_strategy: str = "agentic_rag"
         self._vector_store = VectorStore()
         
         # Register built-in strategies
@@ -36,6 +37,7 @@ class SearchService:
     def _register_default_strategies(self):
         """Register the default search strategies."""
         self.register_strategy(TitleFirstStrategy())
+        self.register_strategy(AgenticRAGStrategy())
     
     def register_strategy(self, strategy: SearchStrategy):
         """
