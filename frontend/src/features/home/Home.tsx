@@ -4,13 +4,12 @@ import {
   getCurrentOrg, 
   getMeetingsByOrg, 
   createMeeting, 
-  searchOrg,
   type MeetingsResponse,
   type SearchResponse,
 } from "@/api/client";
 import { UploadTranscriptModal } from "./UploadTranscriptModal";
 import { SearchBar } from "./SearchBar";
-import { SearchResults } from "./SearchResults";
+import { OrgChatView } from "./OrgChatView";
 
 type Meeting = MeetingsResponse["meetings"][number];
 
@@ -58,7 +57,6 @@ export function Home() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   
   // Search state - initialize from sessionStorage if available
-  const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState(() => {
     const saved = loadSearchState();
     return saved?.query ?? "";
@@ -68,6 +66,11 @@ export function Home() {
     return saved?.result ?? null;
   });
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [showChatView, setShowChatView] = useState(() => {
+    // Show chat view if we have persisted search state
+    const saved = loadSearchState();
+    return saved?.query && saved?.result?.success ? true : false;
+  });
 
   useEffect(() => {
     async function load() {
@@ -96,35 +99,21 @@ export function Home() {
     navigate(`/meeting/${result.meetingId}`);
   }, [orgId, navigate]);
 
-  const handleSearch = useCallback(async (query: string) => {
+  const handleSearch = useCallback((query: string) => {
     if (!orgId) return;
     
-    setIsSearching(true);
+    // Immediately show the chat view with the query - the chat view will handle the search
     setSearchQuery(query);
+    setSearchResult(null); // Clear any previous result
     setSearchError(null);
-    
-    try {
-      const result = await searchOrg(orgId, query);
-      setSearchResult(result);
-      
-      if (result.success) {
-        // Persist successful search results to sessionStorage
-        saveSearchState(query, result);
-      } else if (result.error) {
-        setSearchError(result.error);
-      }
-    } catch (e) {
-      setSearchError(e instanceof Error ? e.message : "Search failed");
-      setSearchResult(null);
-    } finally {
-      setIsSearching(false);
-    }
+    setShowChatView(true);
   }, [orgId]);
 
   const handleCloseSearch = useCallback(() => {
     setSearchResult(null);
     setSearchQuery("");
     setSearchError(null);
+    setShowChatView(false);
     clearSearchState();
   }, []);
 
@@ -165,7 +154,7 @@ export function Home() {
         <div className="search-section">
           <SearchBar 
             onSearch={handleSearch} 
-            isLoading={isSearching}
+            isLoading={false}
             placeholder="Ask anything about your meetings..."
             initialQuery={searchQuery}
           />
@@ -179,17 +168,6 @@ export function Home() {
               </svg>
               {searchError}
             </div>
-          )}
-          
-          {searchResult && searchResult.success && (
-            <SearchResults
-              query={searchQuery}
-              answer={searchResult.answer}
-              sources={searchResult.sources}
-              strategyUsed={searchResult.strategy_used}
-              debugInfo={searchResult.debug_info}
-              onClose={handleCloseSearch}
-            />
           )}
         </div>
       </div>
@@ -257,6 +235,15 @@ export function Home() {
         onClose={() => setShowUploadModal(false)}
         onSubmit={handleCreateMeeting}
       />
+
+      {showChatView && orgId && (
+        <OrgChatView
+          orgId={orgId}
+          initialQuery={searchQuery}
+          initialResult={searchResult}
+          onClose={handleCloseSearch}
+        />
+      )}
 
       <style>{`
         .home-container {
