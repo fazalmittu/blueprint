@@ -8,7 +8,13 @@ export interface DecisionNodeData {
 
 /**
  * Decision node - diamond shape for conditionals/branches.
- * Double-click to edit label.
+ * Larger size with better text display.
+ * 
+ * Handles for horizontal layout:
+ * - Left: input
+ * - Top: "Yes" output
+ * - Bottom: "No" output  
+ * - Right: default output
  */
 export const DecisionNode = memo(function DecisionNode({
   data,
@@ -16,7 +22,7 @@ export const DecisionNode = memo(function DecisionNode({
 }: NodeProps & { data: DecisionNodeData }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -39,7 +45,8 @@ export const DecisionNode = memo(function DecisionNode({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
         handleBlur();
       } else if (e.key === "Escape") {
         setEditValue(data.label);
@@ -49,67 +56,50 @@ export const DecisionNode = memo(function DecisionNode({
     [handleBlur, data.label]
   );
 
-  const size = 80;
+  const size = 120;
+  const handleOffset = -6;
 
   return (
     <div
-      onDoubleClick={handleDoubleClick}
       style={{
         width: size,
         height: size,
-        transform: "rotate(45deg)",
-        background: selected ? "#fef3c7" : "#fffbeb",
-        border: `2px solid ${selected ? "#f59e0b" : "#fbbf24"}`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "grab",
-        boxShadow: selected ? "var(--shadow-md)" : "var(--shadow-sm)",
-        transition: "all var(--transition-fast)",
+        position: "relative",
       }}
     >
-      {/* Top target handle - for normal forward edges */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="top"
+      {/* Diamond shape */}
+      <div
+        onDoubleClick={handleDoubleClick}
         style={{
-          background: "#f59e0b",
-          border: "2px solid var(--bg-elevated)",
-          width: 10,
-          height: 10,
-          transform: "rotate(-45deg)",
-          top: -5,
-          left: "50%",
-        }}
-      />
-      
-      {/* Left target handle - for back-edges (loops) */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="left"
-        style={{
-          background: "#f59e0b",
-          border: "2px solid var(--bg-elevated)",
-          width: 10,
-          height: 10,
-          transform: "rotate(-45deg)",
-          left: -5,
+          position: "absolute",
           top: "50%",
+          left: "50%",
+          width: size * 0.75,
+          height: size * 0.75,
+          transform: "translate(-50%, -50%) rotate(45deg)",
+          background: selected ? "#fef3c7" : "#fffbeb",
+          border: `2px solid ${selected ? "#f59e0b" : "#fbbf24"}`,
+          cursor: "grab",
+          boxShadow: selected ? "var(--shadow-md)" : "var(--shadow-sm)",
+          transition: "all var(--transition-fast)",
         }}
       />
 
+      {/* Text container - not rotated */}
       <div
+        onDoubleClick={handleDoubleClick}
         style={{
-          transform: "rotate(-45deg)",
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: size * 0.65,
           textAlign: "center",
-          padding: "4px",
-          maxWidth: size * 0.9,
+          cursor: "grab",
         }}
       >
         {isEditing ? (
-          <input
+          <textarea
             ref={inputRef}
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
@@ -125,7 +115,10 @@ export const DecisionNode = memo(function DecisionNode({
               textAlign: "center",
               width: "100%",
               fontFamily: "var(--font-sans)",
+              resize: "none",
+              lineHeight: 1.3,
             }}
+            rows={3}
           />
         ) : (
           <span
@@ -135,61 +128,69 @@ export const DecisionNode = memo(function DecisionNode({
               color: "var(--text-primary)",
               userSelect: "none",
               wordBreak: "break-word",
+              lineHeight: 1.3,
+              display: "block",
             }}
           >
-            {data.label || "Decision"}
+            {data.label || "Decision?"}
           </span>
         )}
       </div>
 
-      {/* Left handle (No) */}
+      {/* Left target handle - input */}
       <Handle
-        type="source"
+        type="target"
         position={Position.Left}
-        id="no"
         style={{
-          background: "#ef4444",
+          background: "#f59e0b",
           border: "2px solid var(--bg-elevated)",
           width: 10,
           height: 10,
-          transform: "rotate(-45deg)",
-          left: -5,
-          top: "50%",
+          left: handleOffset,
         }}
       />
 
-      {/* Right handle (Yes) */}
+      {/* Top handle - Yes branch */}
       <Handle
         type="source"
-        position={Position.Right}
+        position={Position.Top}
         id="yes"
         style={{
           background: "#10b981",
           border: "2px solid var(--bg-elevated)",
           width: 10,
           height: 10,
-          transform: "rotate(-45deg)",
-          right: -5,
-          top: "50%",
+          top: handleOffset,
         }}
       />
 
-      {/* Bottom handle (default) */}
+      {/* Bottom handle - No branch */}
       <Handle
         type="source"
         position={Position.Bottom}
+        id="no"
+        style={{
+          background: "#ef4444",
+          border: "2px solid var(--bg-elevated)",
+          width: 10,
+          height: 10,
+          bottom: handleOffset,
+        }}
+      />
+
+      {/* Right handle - default/continue */}
+      <Handle
+        type="source"
+        position={Position.Right}
         id="default"
         style={{
           background: "#f59e0b",
           border: "2px solid var(--bg-elevated)",
           width: 10,
           height: 10,
-          transform: "rotate(-45deg)",
-          bottom: -5,
-          left: "50%",
+          right: handleOffset,
         }}
       />
     </div>
   );
 });
-

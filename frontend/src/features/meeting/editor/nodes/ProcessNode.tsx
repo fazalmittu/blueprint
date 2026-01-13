@@ -3,11 +3,13 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 
 export interface ProcessNodeData {
   label: string;
+  width?: number;
   onLabelChange?: (label: string) => void;
 }
 
 /**
  * Process node - rectangular shape for actions/steps.
+ * Width is dynamic based on text content.
  * Double-click to edit label.
  */
 export const ProcessNode = memo(function ProcessNode({
@@ -49,15 +51,20 @@ export const ProcessNode = memo(function ProcessNode({
     [handleBlur, data.label]
   );
 
+  // Use width from layout calculation, or auto
+  const width = data.width || "auto";
+
   return (
     <div
       onDoubleClick={handleDoubleClick}
       style={{
-        padding: "10px 16px",
+        padding: "12px 20px",
         borderRadius: "var(--radius-sm)",
         background: selected ? "var(--accent-subtle)" : "var(--bg-elevated)",
         border: `2px solid ${selected ? "var(--accent)" : "var(--border-default)"}`,
-        minWidth: 100,
+        width: width,
+        minWidth: 120,
+        maxWidth: 300,
         minHeight: 40,
         display: "flex",
         alignItems: "center",
@@ -65,26 +72,13 @@ export const ProcessNode = memo(function ProcessNode({
         cursor: "grab",
         boxShadow: selected ? "var(--shadow-md)" : "var(--shadow-sm)",
         transition: "all var(--transition-fast)",
+        textAlign: "center",
       }}
     >
-      {/* Top target handle - for normal forward edges */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="top"
-        style={{
-          background: "var(--accent)",
-          border: "2px solid var(--bg-elevated)",
-          width: 10,
-          height: 10,
-        }}
-      />
-      
-      {/* Left target handle - for back-edges (loops) */}
+      {/* Left target handle - input */}
       <Handle
         type="target"
         position={Position.Left}
-        id="left"
         style={{
           background: "var(--accent)",
           border: "2px solid var(--bg-elevated)",
@@ -119,15 +113,17 @@ export const ProcessNode = memo(function ProcessNode({
             fontWeight: 500,
             color: "var(--text-primary)",
             userSelect: "none",
+            lineHeight: 1.4,
           }}
         >
           {data.label || "Process"}
         </span>
       )}
 
+      {/* Right source handle - output */}
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         style={{
           background: "var(--accent)",
           border: "2px solid var(--bg-elevated)",
@@ -138,4 +134,3 @@ export const ProcessNode = memo(function ProcessNode({
     </div>
   );
 });
-

@@ -146,7 +146,7 @@ export function CanvasView({
   }, []);
 
   const getWorkflowSize = useCallback((workflowId: string) => {
-    return workflowSizes[workflowId] || { width: 480, height: 360 };
+    return workflowSizes[workflowId] || { width: 900, height: 500 };
   }, [workflowSizes]);
 
   const handleAddText = useCallback(() => {

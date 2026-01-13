@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   ReactFlow,
@@ -12,7 +12,7 @@ import type { Workflow } from "@/types";
 import { DraggableBlock, type Position } from "./DraggableBlock";
 import { BlockHeader } from "./BlockHeader";
 import { WorkflowEditor } from "../editor";
-import { workflowToReactFlow, workflowToReactFlowAsync } from "../editor/layoutUtils";
+import { workflowToReactFlowAsync } from "../editor/layoutUtils";
 import { ProcessNode, DecisionNode, TerminalNode } from "../editor/nodes";
 
 // Node types for React Flow
@@ -45,8 +45,8 @@ export function WorkflowBlock({
   workflow,
   position,
   onPositionChange,
-  width = 480,
-  height = 360,
+  width = 900,
+  height = 500,
   onSizeChange,
   selected = false,
   onSelect,
@@ -58,37 +58,33 @@ export function WorkflowBlock({
   const [isEditing, setIsEditing] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   
-  // Use async ELK layout for better results
+  // Store laid out nodes/edges in state
   const [displayNodes, setDisplayNodes] = useState<Node[]>([]);
   const [displayEdges, setDisplayEdges] = useState<Edge[]>([]);
-  const [isLayouting, setIsLayouting] = useState(true);
-
-  // Run async layout when workflow changes
+  
+  // Memoize workflow ID to prevent unnecessary re-layouts
+  const workflowKey = useMemo(() => 
+    `${workflow.id}-${workflow.nodes.length}-${workflow.edges.length}`,
+    [workflow.id, workflow.nodes.length, workflow.edges.length]
+  );
+  
+  // Run async ELK layout when workflow changes
   useEffect(() => {
     let cancelled = false;
-    setIsLayouting(true);
     
-    // Start with sync layout for immediate display
-    const syncResult = workflowToReactFlow(workflow);
-    setDisplayNodes(syncResult.nodes);
-    setDisplayEdges(syncResult.edges);
-    
-    // Then run async ELK layout for better results
     workflowToReactFlowAsync(workflow).then((result) => {
       if (!cancelled) {
         setDisplayNodes(result.nodes);
         setDisplayEdges(result.edges);
-        setIsLayouting(false);
       }
     }).catch((err) => {
       console.error("ELK layout failed:", err);
-      setIsLayouting(false);
     });
     
     return () => {
       cancelled = true;
     };
-  }, [workflow]);
+  }, [workflowKey, workflow]);
 
   const toggleMinimize = useCallback(() => {
     setIsMinimized(!isMinimized);
@@ -338,9 +334,9 @@ export function WorkflowBlock({
                   maxZoom={2}
                   fitView
                   fitViewOptions={{
-                    padding: 0.3,
-                    maxZoom: 1,
-                    minZoom: 0.3,
+                    padding: 0.15,
+                    maxZoom: 1.5,
+                    minZoom: 0.1,
                   }}
                   proOptions={{ hideAttribution: true }}
                 >

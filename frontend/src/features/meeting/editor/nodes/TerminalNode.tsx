@@ -9,7 +9,7 @@ export interface TerminalNodeData {
 
 /**
  * Terminal node - rounded pill shape for start/end.
- * Double-click to edit label.
+ * Horizontal layout: Start has output on right, End has input on left.
  */
 export const TerminalNode = memo(function TerminalNode({
   data,
@@ -72,12 +72,12 @@ export const TerminalNode = memo(function TerminalNode({
     <div
       onDoubleClick={handleDoubleClick}
       style={{
-        padding: "8px 20px",
+        padding: "12px 20px",
         borderRadius: "9999px",
         background: bgColor,
         border: `2px solid ${borderColor}`,
-        minWidth: 80,
-        minHeight: 36,
+        minWidth: 70,
+        height: 50,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -86,11 +86,11 @@ export const TerminalNode = memo(function TerminalNode({
         transition: "all var(--transition-fast)",
       }}
     >
-      {/* Start nodes only have source handle (bottom) */}
+      {/* Start nodes only have source handle (right side) */}
       {isStart && (
         <Handle
           type="source"
-          position={Position.Bottom}
+          position={Position.Right}
           style={{
             background: handleColor,
             border: "2px solid var(--bg-elevated)",
@@ -100,32 +100,18 @@ export const TerminalNode = memo(function TerminalNode({
         />
       )}
 
-      {/* End nodes have target handles */}
+      {/* End nodes only have target handle (left side) */}
       {!isStart && (
-        <>
-          <Handle
-            type="target"
-            position={Position.Top}
-            id="top"
-            style={{
-              background: handleColor,
-              border: "2px solid var(--bg-elevated)",
-              width: 10,
-              height: 10,
-            }}
-          />
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="left"
-            style={{
-              background: handleColor,
-              border: "2px solid var(--bg-elevated)",
-              width: 10,
-              height: 10,
-            }}
-          />
-        </>
+        <Handle
+          type="target"
+          position={Position.Left}
+          style={{
+            background: handleColor,
+            border: "2px solid var(--bg-elevated)",
+            width: 10,
+            height: 10,
+          }}
+        />
       )}
 
       {isEditing ? (
@@ -162,4 +148,3 @@ export const TerminalNode = memo(function TerminalNode({
     </div>
   );
 });
-
