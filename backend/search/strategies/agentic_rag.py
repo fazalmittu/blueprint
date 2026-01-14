@@ -222,9 +222,11 @@ class AgenticRAGStrategy(SearchStrategy):
         query: str,
         org_id: str,
         top_k: int = 5,
+        history: list = None,
         **kwargs
     ) -> SearchResult:
         """Execute the agentic RAG search strategy."""
+        history = history or []
         debug_info = {
             "iterations": 0,
             "tool_calls": [],
@@ -255,7 +257,7 @@ class AgenticRAGStrategy(SearchStrategy):
                 )
             
             # Generate final answer from gathered context
-            answer = self._generate_answer(query, context)
+            answer = self._generate_answer(query, context, history)
             
             # Build source references
             sources = self._build_sources(context)
@@ -772,8 +774,9 @@ followed by an explanation."""
         unique_sources.sort(key=lambda x: x.score, reverse=True)
         return unique_sources[:10]  # Limit to top 10 sources
     
-    def _generate_answer(self, query: str, context: GatheredContext) -> str:
-        """Generate a comprehensive answer from gathered context."""
+    def _generate_answer(self, query: str, context: GatheredContext, history: list = None) -> str:
+        """Generate a comprehensive answer from gathered context and conversation history."""
+        history = history or []
         
         # Build context sections
         context_parts = []
@@ -814,36 +817,37 @@ followed by an explanation."""
         if not full_context.strip():
             return "I couldn't find any relevant information in the meetings to answer your question."
         
-        prompt = f"""You are a helpful assistant answering questions about company meetings.
+        system_prompt = f"""You answer questions about company meetings based on gathered context.
+Be accurate, cite specific details, and synthesize information from multiple sources when available.
+If the user references something from a previous message, use the conversation history to understand the context.
 
-Based on the following information gathered from meeting searches:
+Here is the gathered meeting context:
 
 {full_context}
 
----
-
-User's Question: {query}
-
-Please provide a comprehensive and accurate answer based on the information above.
+Guidelines:
 - Be specific and reference details from the meetings when relevant
 - If information comes from multiple meetings, synthesize it into a coherent answer
 - If the information doesn't fully answer the question, acknowledge what's missing
 - Cite which meetings the information came from when possible"""
 
         try:
+            # Build messages array with conversation history
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Add conversation history
+            for msg in history:
+                messages.append({
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", "")
+                })
+            
+            # Add current query
+            messages.append({"role": "user", "content": query})
+            
             response = self._client.chat.completions.create(
                 model=self._answer_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You answer questions about company meetings based on gathered context. "
-                            "Be accurate, cite specific details, and synthesize information from "
-                            "multiple sources when available."
-                        )
-                    },
-                    {"role": "user", "content": prompt}
-                ],
+                messages=messages,
                 temperature=0.3,
                 max_tokens=2000
             )

@@ -77,6 +77,7 @@ class SearchService:
         org_id: str,
         strategy_name: Optional[str] = None,
         top_k: int = 5,
+        history: list = None,
         **kwargs
     ) -> SearchResult:
         """
@@ -87,6 +88,7 @@ class SearchService:
             org_id: Organization to search within
             strategy_name: Strategy to use (defaults to default_strategy)
             top_k: Maximum number of sources to consider
+            history: Previous conversation history for context
             **kwargs: Strategy-specific options
             
         Returns:
@@ -104,7 +106,7 @@ class SearchService:
             )
         
         strategy = self._strategies[strategy_name]
-        return strategy.search(query, org_id, top_k, **kwargs)
+        return strategy.search(query, org_id, top_k, history=history or [], **kwargs)
     
     def get_index_stats(self) -> dict:
         """Get statistics about the search indices."""

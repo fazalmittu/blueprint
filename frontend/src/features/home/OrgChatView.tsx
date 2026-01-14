@@ -336,7 +336,13 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
     setIsLoading(true);
 
     try {
-      const result = await searchOrg(orgId, trimmedInput);
+      // Build conversation history for context
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      
+      const result = await searchOrg(orgId, trimmedInput, { history });
       
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
@@ -359,7 +365,7 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, orgId]);
+  }, [input, isLoading, orgId, messages]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

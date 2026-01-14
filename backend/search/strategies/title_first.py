@@ -75,9 +75,11 @@ class TitleFirstStrategy(SearchStrategy):
         query: str,
         org_id: str,
         top_k: int = 5,
+        history: list = None,
         **kwargs
     ) -> SearchResult:
         """Execute the title-first search strategy."""
+        history = history or []
         debug_info = {}
         
         try:
@@ -145,7 +147,7 @@ class TitleFirstStrategy(SearchStrategy):
                 )
             
             # Step 5: Generate answer
-            answer = self._generate_answer(query, context)
+            answer = self._generate_answer(query, context, history)
             debug_info["answer_generated"] = True
             
             # Build source reference
@@ -253,37 +255,46 @@ Only select 0 if you're confident none of the meetings could possibly be relevan
             "meeting_id": meeting_id
         }
     
-    def _generate_answer(self, query: str, context: dict) -> str:
-        """Generate a comprehensive answer using the full meeting context."""
-        # Build the prompt
-        prompt = f"""You are a helpful assistant answering questions about company meetings.
-
-Meeting: {context['title']}
+    def _generate_answer(self, query: str, context: dict, history: list = None) -> str:
+        """Generate a comprehensive answer using the full meeting context and conversation history."""
+        history = history or []
+        
+        # Build context prompt
+        context_prompt = f"""Meeting: {context['title']}
 
 Meeting Notes:
 {context['meeting_notes'] if context['meeting_notes'] else "(No structured notes available)"}
 
 Full Transcript:
-{context['transcript'][:50000] if context['transcript'] else "(No transcript available)"}
+{context['transcript'][:50000] if context['transcript'] else "(No transcript available)"}"""
 
----
+        system_prompt = f"""You answer questions about meetings based on transcripts and notes. Be accurate and cite specific details.
 
-User's Question: {query}
+Here is the meeting context you have access to:
 
-Please provide a comprehensive answer based on the meeting content above. 
+{context_prompt}
+
 If the information isn't in the meeting, say so clearly.
-Be specific and reference details from the meeting when relevant."""
+Be specific and reference details from the meeting when relevant.
+If the user references something from a previous message, use the conversation history to understand the context."""
 
         try:
+            # Build messages array with conversation history
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Add conversation history
+            for msg in history:
+                messages.append({
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", "")
+                })
+            
+            # Add current query
+            messages.append({"role": "user", "content": query})
+            
             response = self._client.chat.completions.create(
                 model=self._answer_model,
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": "You answer questions about meetings based on transcripts and notes. Be accurate and cite specific details."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
+                messages=messages,
                 temperature=0.3,
                 max_tokens=2000
             )

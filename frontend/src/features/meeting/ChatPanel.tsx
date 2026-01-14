@@ -34,6 +34,56 @@ interface Message {
   action?: ChatResponse["action"];
 }
 
+const WELCOME_MESSAGE: Message = {
+  id: "welcome",
+  role: "assistant",
+  content: "Hi! I'm your meeting assistant. I can help you:\n\n• **Summarize** the meeting notes\n• **Edit workflows** - add, modify, or remove steps\n• **Answer questions** about the meeting\n\nHow can I help you?",
+  timestamp: new Date(),
+};
+
+/**
+ * Get the localStorage key for a meeting's chat history.
+ */
+function getChatStorageKey(meetingId: string): string {
+  return `chat-history-${meetingId}`;
+}
+
+/**
+ * Load chat history from localStorage.
+ */
+function loadChatHistory(meetingId: string): Message[] {
+  try {
+    const stored = localStorage.getItem(getChatStorageKey(meetingId));
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Convert timestamp strings back to Date objects
+      return parsed.map((m: Message & { timestamp: string }) => ({
+        ...m,
+        timestamp: new Date(m.timestamp),
+      }));
+    }
+  } catch (e) {
+    console.error("Failed to load chat history:", e);
+  }
+  return [{ ...WELCOME_MESSAGE, timestamp: new Date() }];
+}
+
+/**
+ * Save chat history to localStorage.
+ */
+function saveChatHistory(meetingId: string, messages: Message[]): void {
+  try {
+    // Don't save just the welcome message
+    if (messages.length <= 1) {
+      localStorage.removeItem(getChatStorageKey(meetingId));
+      return;
+    }
+    localStorage.setItem(getChatStorageKey(meetingId), JSON.stringify(messages));
+  } catch (e) {
+    console.error("Failed to save chat history:", e);
+  }
+}
+
 export function ChatPanel({
   isOpen,
   onClose,
@@ -43,18 +93,21 @@ export function ChatPanel({
   onWorkflowUpdated,
   onSummaryUpdated,
 }: ChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "Hi! I'm your meeting assistant. I can help you:\n\n• **Summarize** the meeting notes\n• **Edit workflows** - add, modify, or remove steps\n• **Answer questions** about the meeting\n\nHow can I help you?",
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>(() => loadChatHistory(meetingId));
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Save chat history whenever messages change
+  useEffect(() => {
+    saveChatHistory(meetingId, messages);
+  }, [meetingId, messages]);
+
+  // Load chat history when meetingId changes
+  useEffect(() => {
+    setMessages(loadChatHistory(meetingId));
+  }, [meetingId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -183,26 +236,59 @@ export function ChatPanel({
           </svg>
           <span style={{ fontWeight: 600, fontSize: "0.9375rem" }}>Meeting Assistant</span>
         </div>
-        <button
-          onClick={onClose}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            padding: "var(--space-xs)",
-            borderRadius: "var(--radius-sm)",
-            color: "var(--text-muted)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          title="Close chat"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)" }}>
+          {messages.length > 1 && (
+            <button
+              onClick={() => setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }])}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "var(--space-xs)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text-muted)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "var(--transition-fast)",
+              }}
+              title="Clear chat history"
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--text-primary)";
+                e.currentTarget.style.background = "var(--bg-tertiary)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-muted)";
+                e.currentTarget.style.background = "none";
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "var(--space-xs)",
+              borderRadius: "var(--radius-sm)",
+              color: "var(--text-muted)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            title="Close chat"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Messages */}

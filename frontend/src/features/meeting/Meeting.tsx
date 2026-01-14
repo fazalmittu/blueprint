@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, type MouseEvent } from "react";
 import { 
   getMeeting, 
   getMeetingVersions, 
@@ -131,6 +131,35 @@ function MeetingContent({
 
   // Chat panel state
   const [isChatOpen, setIsChatOpen] = useState(false);
+
+  // Sidebar resize state
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  // Handle sidebar resize
+  const handleSidebarResizeStart = useCallback((e: MouseEvent) => {
+    e.preventDefault();
+    setIsResizingSidebar(true);
+    sidebarResizeRef.current = { startX: e.clientX, startWidth: sidebarWidth };
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      if (!sidebarResizeRef.current) return;
+      const delta = moveEvent.clientX - sidebarResizeRef.current.startX;
+      const newWidth = Math.max(200, Math.min(500, sidebarResizeRef.current.startWidth + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSidebar(false);
+      sidebarResizeRef.current = null;
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [sidebarWidth]);
 
   // Keyboard shortcut: Cmd+I to toggle chat
   useEffect(() => {
@@ -445,15 +474,62 @@ function MeetingContent({
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* Transcript sidebar */}
         {hasSidebar && (
-          <div style={{ width: 280, flexShrink: 0, borderRight: "1px solid var(--border-subtle)" }}>
-            <TranscriptSidebar
-              versions={versions}
-              currentVersion={data.currentState.version}
-              processingChunkIndex={processingChunkIndex}
-              totalChunks={meeting.totalChunks || 0}
-              isProcessing={isProcessing}
-              onVersionClick={onVersionChange}
-            />
+          <div style={{ 
+            width: sidebarWidth, 
+            flexShrink: 0, 
+            position: "relative",
+            display: "flex",
+          }}>
+            <div style={{ flex: 1, borderRight: "1px solid var(--border-subtle)" }}>
+              <TranscriptSidebar
+                versions={versions}
+                currentVersion={data.currentState.version}
+                currentChunkFullText={state.chunkText}
+                processingChunkIndex={processingChunkIndex}
+                totalChunks={meeting.totalChunks || 0}
+                isProcessing={isProcessing}
+                onVersionClick={onVersionChange}
+              />
+            </div>
+            {/* Resize handle */}
+            <div
+              onMouseDown={handleSidebarResizeStart}
+              style={{
+                position: "absolute",
+                top: 0,
+                right: -3,
+                bottom: 0,
+                width: 6,
+                cursor: "col-resize",
+                background: isResizingSidebar ? "var(--accent)" : "transparent",
+                zIndex: 10,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "background var(--transition-fast)",
+              }}
+              onMouseEnter={(e) => {
+                if (!isResizingSidebar) {
+                  e.currentTarget.style.background = "var(--border-subtle)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isResizingSidebar) {
+                  e.currentTarget.style.background = "transparent";
+                }
+              }}
+            >
+              {isResizingSidebar && (
+                <div
+                  style={{
+                    width: 4,
+                    height: 40,
+                    borderRadius: 2,
+                    background: "var(--accent)",
+                  }}
+                />
+              )}
+            </div>
           </div>
         )}
 

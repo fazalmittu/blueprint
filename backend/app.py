@@ -832,6 +832,7 @@ def register_routes(app):
             query (str): The search query
             strategy (str, optional): Strategy to use (default: "title_first")
             top_k (int, optional): Max sources to consider (default: 5)
+            history (list, optional): Previous conversation history for context
         
         Returns:
             SearchResult with answer, sources, and debug info
@@ -843,6 +844,7 @@ def register_routes(app):
         query = data['query']
         strategy_name = data.get('strategy', None)
         top_k = data.get('top_k', 5)
+        history = data.get('history', [])
         
         try:
             from search.service import get_search_service
@@ -851,7 +853,8 @@ def register_routes(app):
                 query=query,
                 org_id=org_id,
                 strategy_name=strategy_name,
-                top_k=top_k
+                top_k=top_k,
+                history=history
             )
             
             # Convert dataclass to dict for JSON serialization

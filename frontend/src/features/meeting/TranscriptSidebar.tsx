@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { VersionInfo } from "@/api/client";
 
 interface TranscriptSidebarProps {
   versions: VersionInfo[];
   currentVersion: number;
+  currentChunkFullText?: string;
   processingChunkIndex: number | null;
   totalChunks: number;
   isProcessing: boolean;
@@ -13,16 +14,19 @@ interface TranscriptSidebarProps {
 /**
  * Sidebar showing transcript chunks and processing progress.
  * Allows navigation between different state versions.
+ * Click on a chunk to expand and see the full text.
  */
 export function TranscriptSidebar({
   versions,
   currentVersion,
+  currentChunkFullText,
   processingChunkIndex,
   totalChunks,
   isProcessing,
   onVersionClick,
 }: TranscriptSidebarProps) {
   const activeRef = useRef<HTMLDivElement>(null);
+  const [expandedChunk, setExpandedChunk] = useState<number | null>(null);
 
   // Auto-scroll to active chunk when processing
   useEffect(() => {
@@ -70,29 +74,66 @@ export function TranscriptSidebar({
           const isActive = chunk.version === currentVersion;
           const isCurrentlyProcessing = isProcessing && chunk.index === processingChunkIndex;
           const isPending = !chunk.isProcessed && !isCurrentlyProcessing;
+          const isExpanded = expandedChunk === chunk.index;
+
+          const handleChunkClick = () => {
+            if (!chunk.isProcessed) return;
+            
+            // Toggle expansion
+            setExpandedChunk(isExpanded ? null : chunk.index);
+            
+            // Also navigate to this version
+            if (chunk.version !== undefined) {
+              onVersionClick(chunk.version);
+            }
+          };
 
           return (
             <div
               key={chunk.index}
               ref={isCurrentlyProcessing ? activeRef : undefined}
-              className={`chunk-item ${isActive ? "active" : ""} ${isCurrentlyProcessing ? "processing" : ""} ${isPending ? "pending" : ""} ${chunk.isProcessed ? "processed" : ""}`}
-              onClick={() => chunk.version !== undefined && onVersionClick(chunk.version)}
+              className={`chunk-item ${isActive ? "active" : ""} ${isCurrentlyProcessing ? "processing" : ""} ${isPending ? "pending" : ""} ${chunk.isProcessed ? "processed" : ""} ${isExpanded ? "expanded" : ""}`}
+              onClick={handleChunkClick}
               style={{ cursor: chunk.isProcessed ? "pointer" : "default" }}
             >
               <div className="chunk-header">
                 <span className="chunk-number">Chunk {chunk.index + 1}</span>
-                {isCurrentlyProcessing && (
-                  <span className="status-badge processing">Processing</span>
-                )}
-                {isPending && (
-                  <span className="status-badge pending">Pending</span>
-                )}
-                {chunk.isProcessed && !isCurrentlyProcessing && (
-                  <span className="status-badge done">Done</span>
-                )}
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)" }}>
+                  {isCurrentlyProcessing && (
+                    <span className="status-badge processing">Processing</span>
+                  )}
+                  {isPending && (
+                    <span className="status-badge pending">Pending</span>
+                  )}
+                  {chunk.isProcessed && !isCurrentlyProcessing && (
+                    <span className="status-badge done">Done</span>
+                  )}
+                  {chunk.isProcessed && (
+                    <svg 
+                      width="12" 
+                      height="12" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="expand-icon"
+                      style={{
+                        transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                        transition: "transform var(--transition-fast)",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  )}
+                </div>
               </div>
-              <div className="chunk-text">
-                {chunk.text}
+              <div className={`chunk-text ${isExpanded ? "expanded" : ""}`}>
+                {isExpanded && isActive && currentChunkFullText 
+                  ? currentChunkFullText 
+                  : chunk.text}
               </div>
             </div>
           );
@@ -246,11 +287,45 @@ export function TranscriptSidebar({
           -webkit-box-orient: vertical;
           overflow: hidden;
           word-break: break-word;
+          transition: all var(--transition-fast);
+        }
+
+        .chunk-text.expanded {
+          display: block;
+          -webkit-line-clamp: unset;
+          max-height: 400px;
+          overflow-y: auto;
+          padding-right: var(--space-xs);
+        }
+
+        .chunk-text.expanded::-webkit-scrollbar {
+          width: 4px;
+        }
+
+        .chunk-text.expanded::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .chunk-text.expanded::-webkit-scrollbar-thumb {
+          background: var(--border-subtle);
+          border-radius: 2px;
+        }
+
+        .chunk-text.expanded::-webkit-scrollbar-thumb:hover {
+          background: var(--text-muted);
         }
 
         .chunk-item.active .chunk-text,
         .chunk-item.processed .chunk-text {
           color: var(--text-secondary);
+        }
+
+        .chunk-item.expanded {
+          background: var(--bg-secondary);
+        }
+
+        .chunk-item.expanded.active {
+          background: var(--accent-subtle, rgba(59, 130, 246, 0.15));
         }
       `}</style>
     </div>

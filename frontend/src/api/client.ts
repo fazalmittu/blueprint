@@ -452,6 +452,7 @@ export async function searchOrg(
   options?: {
     strategy?: string;
     top_k?: number;
+    history?: ChatMessage[];
   }
 ): Promise<SearchResponse> {
   const res = await fetch(
@@ -463,6 +464,7 @@ export async function searchOrg(
         query,
         strategy: options?.strategy,
         top_k: options?.top_k,
+        history: options?.history,
       }),
     }
   );

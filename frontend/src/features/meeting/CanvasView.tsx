@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { Node, Edge } from "@xyflow/react";
 import { InfiniteCanvas } from "./InfiniteCanvas";
 import { Toolbar } from "./Toolbar";
@@ -128,10 +128,10 @@ export function CanvasView({
     }
   }, [selectedBlockId]);
 
-  useState(() => {
+  useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  });
+  }, [handleKeyDown]);
 
   const getWorkflowPos = useCallback((workflowId: string, index: number): Position => {
     return workflowPositions[workflowId] || getWorkflowPosition(index);

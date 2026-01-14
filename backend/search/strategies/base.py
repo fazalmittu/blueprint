@@ -61,6 +61,7 @@ class SearchStrategy(ABC):
         query: str,
         org_id: str,
         top_k: int = 5,
+        history: list = None,
         **kwargs
     ) -> SearchResult:
         """
@@ -70,6 +71,7 @@ class SearchStrategy(ABC):
             query: The user's question
             org_id: Organization to search within
             top_k: Maximum number of source documents to consider
+            history: Previous conversation history for context
             **kwargs: Strategy-specific options
             
         Returns:
