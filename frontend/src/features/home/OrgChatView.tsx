@@ -781,7 +781,14 @@ export function OrgChatView({ orgId, initialQuery, initialResult, sessionId, onC
                     {chatSessions.map((session) => (
                       <div
                         key={session.id}
-                        onClick={() => handleSwitchSession(session.id)}
+                        onClick={() => {
+                          if (session.meetingId) {
+                            // Navigate to meeting page for meeting chats with chat panel open
+                            navigate(`/meeting/${session.meetingId}?chat=open`);
+                          } else {
+                            handleSwitchSession(session.id);
+                          }
+                        }}
                         style={{
                           padding: "var(--space-sm) var(--space-md)",
                           borderRadius: "var(--radius-md)",
@@ -814,9 +821,33 @@ export function OrgChatView({ orgId, initialQuery, initialResult, sessionId, onC
                               whiteSpace: "nowrap",
                               overflow: "hidden",
                               textOverflow: "ellipsis",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "var(--space-xs)",
                             }}
                           >
-                            {session.title || session.preview || "New conversation"}
+                            {session.meetingId && (
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="var(--accent)"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                style={{ flexShrink: 0 }}
+                                title="Meeting chat"
+                              >
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                <line x1="16" y1="2" x2="16" y2="6" />
+                                <line x1="8" y1="2" x2="8" y2="6" />
+                                <line x1="3" y1="10" x2="21" y2="10" />
+                              </svg>
+                            )}
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {session.title || session.preview || (session.meetingId ? "Meeting chat" : "New conversation")}
+                            </span>
                           </div>
                           <div
                             style={{
@@ -825,7 +856,7 @@ export function OrgChatView({ orgId, initialQuery, initialResult, sessionId, onC
                               marginTop: 2,
                             }}
                           >
-                            {session.messageCount} messages · {new Date(session.updatedAt).toLocaleDateString()}
+                            {session.meetingId ? "Meeting · " : ""}{session.messageCount} messages · {new Date(session.updatedAt).toLocaleDateString()}
                           </div>
                         </div>
                         <button

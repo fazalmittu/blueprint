@@ -70,14 +70,16 @@ def init_db():
             )
         ''')
         
-        # Create chat_sessions table for org-wide search chats
+        # Create chat_sessions table for org-wide search chats and meeting-specific chats
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS chat_sessions (
                 id TEXT PRIMARY KEY,
                 org_id TEXT NOT NULL,
+                meeting_id TEXT,
                 title TEXT,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (meeting_id) REFERENCES meetings(meeting_id)
             )
         ''')
         
@@ -115,6 +117,15 @@ def init_db():
         
         # Migration: add transcript and total_chunks columns if they don't exist
         _migrate_add_transcript_columns(cursor)
+        
+        # Migration: add meeting_id column to chat_sessions if it doesn't exist
+        _migrate_add_chat_session_meeting_id(cursor)
+        
+        # Create index for chat sessions by meeting (must be after migration adds the column)
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_chat_sessions_meeting_id 
+            ON chat_sessions(meeting_id)
+        ''')
 
 
 def _migrate_add_transcript_columns(cursor):
@@ -131,6 +142,15 @@ def _migrate_add_transcript_columns(cursor):
     
     if 'title' not in columns:
         cursor.execute('ALTER TABLE meetings ADD COLUMN title TEXT')
+
+
+def _migrate_add_chat_session_meeting_id(cursor):
+    """Add meeting_id column to chat_sessions if it doesn't exist."""
+    cursor.execute("PRAGMA table_info(chat_sessions)")
+    columns = [col[1] for col in cursor.fetchall()]
+    
+    if 'meeting_id' not in columns:
+        cursor.execute('ALTER TABLE chat_sessions ADD COLUMN meeting_id TEXT')
 
 
 # ==================== MEETING OPERATIONS ====================
@@ -501,20 +521,20 @@ def update_latest_state_summary(meeting_id: str, meeting_summary: str) -> Option
 
 # ==================== CHAT SESSION OPERATIONS ====================
 
-def create_chat_session(session_id: str, org_id: str, title: Optional[str] = None) -> dict:
-    """Create a new chat session."""
+def create_chat_session(session_id: str, org_id: str, title: Optional[str] = None, meeting_id: Optional[str] = None) -> dict:
+    """Create a new chat session (org-wide or meeting-specific)."""
     from datetime import datetime
     now = datetime.utcnow().isoformat()
     
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            '''INSERT INTO chat_sessions (id, org_id, title, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?)''',
-            (session_id, org_id, title, now, now)
+            '''INSERT INTO chat_sessions (id, org_id, meeting_id, title, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (session_id, org_id, meeting_id, title, now, now)
         )
     
-    return {
+    result = {
         'id': session_id,
         'orgId': org_id,
         'title': title,
@@ -522,6 +542,9 @@ def create_chat_session(session_id: str, org_id: str, title: Optional[str] = Non
         'updatedAt': now,
         'messages': []
     }
+    if meeting_id:
+        result['meetingId'] = meeting_id
+    return result
 
 
 def get_chat_session(session_id: str) -> Optional[dict]:
@@ -531,7 +554,7 @@ def get_chat_session(session_id: str) -> Optional[dict]:
         
         # Get session
         cursor.execute(
-            'SELECT id, org_id, title, created_at, updated_at FROM chat_sessions WHERE id = ?',
+            'SELECT id, org_id, meeting_id, title, created_at, updated_at FROM chat_sessions WHERE id = ?',
             (session_id,)
         )
         row = cursor.fetchone()
@@ -561,7 +584,7 @@ def get_chat_session(session_id: str) -> Optional[dict]:
                 message['strategyUsed'] = msg['strategy_used']
             messages.append(message)
         
-        return {
+        result = {
             'id': row['id'],
             'orgId': row['org_id'],
             'title': row['title'],
@@ -569,20 +592,87 @@ def get_chat_session(session_id: str) -> Optional[dict]:
             'updatedAt': row['updated_at'],
             'messages': messages
         }
+        if row['meeting_id']:
+            result['meetingId'] = row['meeting_id']
+        return result
 
 
-def get_chat_sessions_by_org(org_id: str, limit: int = 50) -> list[dict]:
-    """Get all chat sessions for an organization, most recent first."""
+def get_chat_session_by_meeting(meeting_id: str) -> Optional[dict]:
+    """Get the chat session for a specific meeting (there should be at most one)."""
     with get_db() as conn:
         cursor = conn.cursor()
+        
+        # Get session by meeting_id
         cursor.execute(
-            '''SELECT id, org_id, title, created_at, updated_at 
-               FROM chat_sessions 
-               WHERE org_id = ? 
-               ORDER BY updated_at DESC
-               LIMIT ?''',
-            (org_id, limit)
+            'SELECT id, org_id, meeting_id, title, created_at, updated_at FROM chat_sessions WHERE meeting_id = ?',
+            (meeting_id,)
         )
+        row = cursor.fetchone()
+        
+        if row is None:
+            return None
+        
+        # Get messages
+        cursor.execute(
+            '''SELECT id, role, content, sources_json, strategy_used, created_at 
+               FROM chat_messages WHERE session_id = ? ORDER BY id ASC''',
+            (row['id'],)
+        )
+        message_rows = cursor.fetchall()
+        
+        messages = []
+        for msg in message_rows:
+            message = {
+                'id': str(msg['id']),
+                'role': msg['role'],
+                'content': msg['content'],
+                'createdAt': msg['created_at']
+            }
+            if msg['sources_json']:
+                message['sources'] = json.loads(msg['sources_json'])
+            if msg['strategy_used']:
+                message['strategyUsed'] = msg['strategy_used']
+            messages.append(message)
+        
+        return {
+            'id': row['id'],
+            'orgId': row['org_id'],
+            'meetingId': row['meeting_id'],
+            'title': row['title'],
+            'createdAt': row['created_at'],
+            'updatedAt': row['updated_at'],
+            'messages': messages
+        }
+
+
+def get_chat_sessions_by_org(org_id: str, limit: int = 50, include_meeting_chats: bool = False) -> list[dict]:
+    """Get all chat sessions for an organization, most recent first.
+    
+    Args:
+        org_id: The organization ID
+        limit: Maximum number of sessions to return
+        include_meeting_chats: If False (default), excludes meeting-specific chats
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if include_meeting_chats:
+            cursor.execute(
+                '''SELECT id, org_id, meeting_id, title, created_at, updated_at 
+                   FROM chat_sessions 
+                   WHERE org_id = ? 
+                   ORDER BY updated_at DESC
+                   LIMIT ?''',
+                (org_id, limit)
+            )
+        else:
+            cursor.execute(
+                '''SELECT id, org_id, meeting_id, title, created_at, updated_at 
+                   FROM chat_sessions 
+                   WHERE org_id = ? AND meeting_id IS NULL
+                   ORDER BY updated_at DESC
+                   LIMIT ?''',
+                (org_id, limit)
+            )
         rows = cursor.fetchall()
         
         sessions = []
@@ -604,7 +694,7 @@ def get_chat_sessions_by_org(org_id: str, limit: int = 50) -> list[dict]:
             )
             msg_count = cursor.fetchone()[0]
             
-            sessions.append({
+            session_data = {
                 'id': row['id'],
                 'orgId': row['org_id'],
                 'title': row['title'],
@@ -612,7 +702,10 @@ def get_chat_sessions_by_org(org_id: str, limit: int = 50) -> list[dict]:
                 'messageCount': msg_count,
                 'createdAt': row['created_at'],
                 'updatedAt': row['updated_at']
-            })
+            }
+            if row['meeting_id']:
+                session_data['meetingId'] = row['meeting_id']
+            sessions.append(session_data)
         
         return sessions
 

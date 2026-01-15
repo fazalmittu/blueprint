@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useCallback, useEffect, useRef, type MouseEvent } from "react";
 import { 
   getMeeting, 
@@ -105,6 +105,7 @@ function MeetingContent({
   onWorkflowDeleted,
   onWorkflowUpdated,
   onSummaryUpdated,
+  initialChatOpen = false,
 }: { 
   data: MeetingResponse;
   versions: VersionInfo[];
@@ -114,6 +115,7 @@ function MeetingContent({
   onWorkflowDeleted?: (workflowId: string) => void;
   onWorkflowUpdated?: (workflowId: string, nodes: { id: string; type: "process" | "decision" | "terminal"; label: string; variant?: "start" | "end" }[], edges: { id: string; source: string; target: string; label?: string }[]) => void;
   onSummaryUpdated?: (newSummary: string) => void;
+  initialChatOpen?: boolean;
 }) {
   const navigate = useNavigate();
   const state = data.currentState.data;
@@ -130,7 +132,7 @@ function MeetingContent({
   const [activeTab, setActiveTab] = useState("notes");
 
   // Chat panel state
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(initialChatOpen);
 
   // Sidebar resize state
   const [sidebarWidth, setSidebarWidth] = useState(280);
@@ -589,6 +591,8 @@ function MeetingContent({
 export function Meeting() {
   const { meetingId } = useParams<{ meetingId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialChatOpen = searchParams.get("chat") === "open";
   
   const [data, setData] = useState<MeetingResponse | null>(null);
   const [versions, setVersions] = useState<VersionInfo[]>([]);
@@ -847,6 +851,7 @@ export function Meeting() {
       onWorkflowDeleted={handleWorkflowDeleted}
       onWorkflowUpdated={handleWorkflowUpdated}
       onSummaryUpdated={handleSummaryUpdated}
+      initialChatOpen={initialChatOpen}
     />
   );
 }

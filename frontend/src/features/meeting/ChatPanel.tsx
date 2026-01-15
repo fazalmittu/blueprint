@@ -1,5 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { sendChatMessage, type ChatMessage, type ChatResponse } from "@/api/client";
+import { 
+  sendChatMessage, 
+  getMeetingChatSession,
+  addMeetingChatMessage,
+  clearMeetingChatSession,
+  type ChatMessage, 
+  type ChatResponse,
+  type MeetingChatSession,
+} from "@/api/client";
 import type { Workflow } from "@/types";
 
 interface WorkflowNode {
@@ -42,46 +50,45 @@ const WELCOME_MESSAGE: Message = {
 };
 
 /**
- * Get the localStorage key for a meeting's chat history.
+ * Parse content that might be JSON-encoded with a message field.
  */
-function getChatStorageKey(meetingId: string): string {
-  return `chat-history-${meetingId}`;
+function parseMessageContent(content: string): string {
+  if (!content) return content;
+  
+  // Check if content looks like JSON with a message field
+  const trimmed = content.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'object' && parsed.message && typeof parsed.message === 'string') {
+        return parsed.message;
+      }
+    } catch {
+      // Not valid JSON, return as-is
+    }
+  }
+  return content;
 }
 
 /**
- * Load chat history from localStorage.
+ * Convert a MeetingChatSession to Message array.
  */
-function loadChatHistory(meetingId: string): Message[] {
-  try {
-    const stored = localStorage.getItem(getChatStorageKey(meetingId));
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Convert timestamp strings back to Date objects
-      return parsed.map((m: Message & { timestamp: string }) => ({
-        ...m,
-        timestamp: new Date(m.timestamp),
-      }));
-    }
-  } catch (e) {
-    console.error("Failed to load chat history:", e);
+function sessionToMessages(session: MeetingChatSession): Message[] {
+  if (session.messages.length === 0) {
+    return [{ ...WELCOME_MESSAGE, timestamp: new Date() }];
   }
-  return [{ ...WELCOME_MESSAGE, timestamp: new Date() }];
-}
-
-/**
- * Save chat history to localStorage.
- */
-function saveChatHistory(meetingId: string, messages: Message[]): void {
-  try {
-    // Don't save just the welcome message
-    if (messages.length <= 1) {
-      localStorage.removeItem(getChatStorageKey(meetingId));
-      return;
-    }
-    localStorage.setItem(getChatStorageKey(meetingId), JSON.stringify(messages));
-  } catch (e) {
-    console.error("Failed to save chat history:", e);
-  }
+  
+  return session.messages.map((msg) => {
+    // Extract action from sources if present
+    const action = msg.sources?.[0]?.action as ChatResponse["action"] | undefined;
+    return {
+      id: msg.id,
+      role: msg.role,
+      content: parseMessageContent(msg.content),
+      timestamp: new Date(msg.createdAt),
+      action,
+    };
+  });
 }
 
 export function ChatPanel({
@@ -93,20 +100,46 @@ export function ChatPanel({
   onWorkflowUpdated,
   onSummaryUpdated,
 }: ChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>(() => loadChatHistory(meetingId));
+  const [messages, setMessages] = useState<Message[]>([{ ...WELCOME_MESSAGE, timestamp: new Date() }]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Save chat history whenever messages change
+  // Load chat history from database when meetingId changes
   useEffect(() => {
-    saveChatHistory(meetingId, messages);
-  }, [meetingId, messages]);
-
-  // Load chat history when meetingId changes
-  useEffect(() => {
-    setMessages(loadChatHistory(meetingId));
+    let cancelled = false;
+    
+    // Immediately reset to welcome message while loading
+    setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }]);
+    setInput("");
+    
+    async function loadHistory() {
+      setIsLoadingHistory(true);
+      try {
+        const session = await getMeetingChatSession(meetingId);
+        if (!cancelled) {
+          setMessages(sessionToMessages(session));
+        }
+      } catch (error) {
+        console.error("Failed to load chat history:", error);
+        if (!cancelled) {
+          // Start with welcome message on error
+          setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingHistory(false);
+        }
+      }
+    }
+    
+    loadHistory();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [meetingId]);
 
   // Auto-scroll to bottom when new messages arrive
@@ -136,6 +169,11 @@ export function ChatPanel({
     setInput("");
     setIsLoading(true);
 
+    // Save user message to database (fire and forget)
+    addMeetingChatMessage(meetingId, "user", trimmedInput).catch((err) => {
+      console.error("Failed to save user message:", err);
+    });
+
     try {
       // Build conversation history for context
       const history: ChatMessage[] = messages
@@ -156,6 +194,11 @@ export function ChatPanel({
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Save assistant message to database (fire and forget)
+      addMeetingChatMessage(meetingId, "assistant", response.message, response.action).catch((err) => {
+        console.error("Failed to save assistant message:", err);
+      });
 
       // Handle actions from the LLM
       if (response.action) {
@@ -239,7 +282,15 @@ export function ChatPanel({
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)" }}>
           {messages.length > 1 && (
             <button
-              onClick={() => setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }])}
+              onClick={async () => {
+                // Clear from database
+                try {
+                  await clearMeetingChatSession(meetingId);
+                } catch (err) {
+                  console.error("Failed to clear chat history:", err);
+                }
+                setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }]);
+              }}
               style={{
                 background: "none",
                 border: "none",
@@ -302,7 +353,31 @@ export function ChatPanel({
           gap: "var(--space-md)",
         }}
       >
-        {messages.map((message) => (
+        {isLoadingHistory && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "var(--space-lg)",
+              color: "var(--text-muted)",
+            }}
+          >
+            <div
+              style={{
+                width: 20,
+                height: 20,
+                border: "2px solid var(--border-subtle)",
+                borderTopColor: "var(--accent)",
+                borderRadius: "50%",
+                animation: "spin 1s linear infinite",
+                marginRight: "var(--space-sm)",
+              }}
+            />
+            <span style={{ fontSize: "0.8125rem" }}>Loading chat history...</span>
+          </div>
+        )}
+        {!isLoadingHistory && messages.map((message) => (
           <div
             key={message.id}
             style={{
@@ -355,7 +430,7 @@ export function ChatPanel({
             </span>
           </div>
         ))}
-        {isLoading && (
+        {!isLoadingHistory && isLoading && (
           <div style={{ display: "flex", alignItems: "flex-start" }}>
             <div
               style={{
@@ -468,6 +543,10 @@ export function ChatPanel({
         @keyframes typing {
           0%, 60%, 100% { transform: translateY(0); }
           30% { transform: translateY(-4px); }
+        }
+        
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>

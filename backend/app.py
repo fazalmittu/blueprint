@@ -949,12 +949,14 @@ def register_routes(app):
         
         Query Parameters:
             limit (int, optional): Max sessions to return (default: 50)
+            include_meeting_chats (bool, optional): Include meeting-specific chats (default: true)
         
         Returns:
             List of chat session summaries
         """
         limit = request.args.get('limit', 50, type=int)
-        sessions = db.get_chat_sessions_by_org(org_id, limit)
+        include_meeting_chats = request.args.get('include_meeting_chats', 'true').lower() == 'true'
+        sessions = db.get_chat_sessions_by_org(org_id, limit, include_meeting_chats=include_meeting_chats)
         return jsonify({'sessions': sessions}), 200
 
     @app.route('/org/<org_id>/chat', methods=['POST'])
@@ -1056,7 +1058,128 @@ def register_routes(app):
         strategy_used = data.get('strategyUsed')
         
         message = db.add_chat_message(session_id, role, content, sources, strategy_used)
+        
+        # Generate title after first assistant response if session has no title
+        if role == 'assistant' and not session.get('title'):
+            # Get the first user message for context
+            messages = session.get('messages', [])
+            first_user_msg = next((m['content'] for m in messages if m['role'] == 'user'), None)
+            if first_user_msg:
+                try:
+                    title = generate_chat_title(first_user_msg, content)
+                    db.update_chat_session_title(session_id, title)
+                    print(f"[CHAT] Generated title for session {session_id}: {title}")
+                except Exception as e:
+                    print(f"[CHAT] Failed to generate title: {e}")
+        
         return jsonify(message), 201
+
+    # ==================== MEETING CHAT ENDPOINTS ====================
+
+    @app.route('/meeting/<meeting_id>/chat/session', methods=['GET'])
+    def get_meeting_chat_session(meeting_id: str):
+        """
+        Get the chat session for a meeting. Returns null if no session exists yet.
+        Sessions are only created when the first message is sent.
+        
+        Returns:
+            The chat session with messages, or null if none exists
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        # Check if a chat session already exists for this meeting
+        session = db.get_chat_session_by_meeting(meeting_id)
+        
+        if session:
+            return jsonify(session), 200
+        
+        # Return empty response - session will be created on first message
+        return jsonify({
+            'id': None,
+            'orgId': meeting.orgId,
+            'meetingId': meeting_id,
+            'title': None,
+            'messages': []
+        }), 200
+
+    @app.route('/meeting/<meeting_id>/chat/session/message', methods=['POST'])
+    def add_meeting_chat_message(meeting_id: str):
+        """
+        Add a message to the meeting's chat session.
+        Creates a chat session if one doesn't exist.
+        
+        Request Body:
+            role (str): 'user' or 'assistant'
+            content (str): The message content
+            action (object, optional): Any action performed (workflow update, summary update)
+        
+        Returns:
+            The created message
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        role = data.get('role')
+        content = data.get('content')
+        
+        if not role or role not in ('user', 'assistant'):
+            return jsonify({'error': 'role must be "user" or "assistant"'}), 400
+        if not content:
+            return jsonify({'error': 'content is required'}), 400
+        
+        # Get or create the chat session
+        session = db.get_chat_session_by_meeting(meeting_id)
+        if not session:
+            session_id = str(uuid.uuid4())
+            # Create without title - will generate after first exchange
+            session = db.create_chat_session(session_id, meeting.orgId, title=None, meeting_id=meeting_id)
+        
+        # Store action as part of sources_json for now (we can extend the schema later if needed)
+        action = data.get('action')
+        sources = [{'action': action}] if action else None
+        
+        message = db.add_chat_message(session['id'], role, content, sources)
+        
+        # Generate title after first assistant response if session has no title
+        if role == 'assistant' and not session.get('title'):
+            # Get the first user message for context
+            messages = session.get('messages', [])
+            first_user_msg = next((m['content'] for m in messages if m['role'] == 'user'), None)
+            if first_user_msg:
+                try:
+                    title = generate_chat_title(first_user_msg, content)
+                    db.update_chat_session_title(session['id'], title)
+                    print(f"[MEETING CHAT] Generated title for session {session['id']}: {title}")
+                except Exception as e:
+                    print(f"[MEETING CHAT] Failed to generate title: {e}")
+        
+        return jsonify(message), 201
+
+    @app.route('/meeting/<meeting_id>/chat/session', methods=['DELETE'])
+    def clear_meeting_chat_session(meeting_id: str):
+        """
+        Clear (delete) the chat session for a meeting.
+        
+        Returns:
+            Success status
+        """
+        meeting = db.get_meeting(meeting_id)
+        if not meeting:
+            return jsonify({'error': 'Meeting not found'}), 404
+        
+        session = db.get_chat_session_by_meeting(meeting_id)
+        if not session:
+            return jsonify({'success': True, 'message': 'No chat session to delete'}), 200
+        
+        db.delete_chat_session(session['id'])
+        return jsonify({'success': True}), 200
 
 
 def broadcast_to_meeting(meeting_id: str, message: dict):
@@ -1537,6 +1660,7 @@ Be conversational and helpful. If you're not performing an action, set action to
             tools=CHAT_TOOLS,
             tool_choice="auto",
             temperature=0.7,
+            response_format={"type": "json_object"},
         )
         
         message = response.choices[0].message
@@ -1586,6 +1710,19 @@ Be conversational and helpful. If you're not performing an action, set action to
         if raw_content:
             try:
                 result = json.loads(raw_content)
+                # Ensure we have a proper message string (handle potential double-encoding)
+                msg = result.get('message', raw_content)
+                if isinstance(msg, str):
+                    # Try to detect if message is JSON-encoded (starts with { or [)
+                    msg_stripped = msg.strip()
+                    if msg_stripped.startswith('{') and msg_stripped.endswith('}'):
+                        try:
+                            nested = json.loads(msg)
+                            if isinstance(nested, dict) and 'message' in nested:
+                                msg = nested.get('message', msg)
+                        except json.JSONDecodeError:
+                            pass  # Not nested JSON, use as-is
+                    result['message'] = msg
             except json.JSONDecodeError:
                 # If not valid JSON, wrap it
                 result = {"message": raw_content, "action": None}
@@ -1593,12 +1730,15 @@ Be conversational and helpful. If you're not performing an action, set action to
             result = {"message": "I apologize, but I could not generate a response.", "action": None}
         
         # Debug: Print response summary
-        response_preview = result.get('message', '')[:100]
-        print(f"\n[CHAT DEBUG] Response: {response_preview}{'...' if len(result.get('message', '')) > 100 else ''}")
+        final_message = result.get('message', '')
+        if not isinstance(final_message, str):
+            final_message = str(final_message)
+        response_preview = final_message[:100]
+        print(f"\n[CHAT DEBUG] Response: {response_preview}{'...' if len(final_message) > 100 else ''}")
         print(f"[CHAT DEBUG] Action: {result.get('action')}\n")
         
         return {
-            'message': result.get('message', 'I apologize, but I could not generate a response.'),
+            'message': final_message if final_message else 'I apologize, but I could not generate a response.',
             'action': result.get('action')
         }
         
@@ -1716,6 +1856,47 @@ def generate_meeting_title(meeting_summary: str, transcript: str = None) -> str:
     except Exception as e:
         print(f"Error generating meeting title: {e}")
         return "Untitled Meeting"
+
+
+def generate_chat_title(user_message: str, assistant_response: str) -> str:
+    """
+    Generate a concise title for a chat conversation using the LLM.
+    
+    Args:
+        user_message: The first user message in the conversation
+        assistant_response: The assistant's response to the first message
+    
+    Returns:
+        A concise title for the conversation (max ~8 words)
+    """
+    if not user_message:
+        return "New conversation"
+    
+    try:
+        response = client.chat.completions.create(
+            model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that generates concise titles for conversations. Generate a short title (3-8 words) that captures the main topic or question. Return ONLY the title, no quotes or extra formatting."
+                },
+                {
+                    "role": "user",
+                    "content": f"Generate a concise title for this conversation:\n\nUser: {user_message[:500]}\n\nAssistant: {assistant_response[:500]}"
+                }
+            ],
+            temperature=0.3,
+            max_tokens=30
+        )
+        
+        title = response.choices[0].message.content.strip()
+        # Remove quotes if the model added them
+        title = title.strip('"\'')
+        return title if title else "New conversation"
+        
+    except Exception as e:
+        print(f"Error generating chat title: {e}")
+        return "New conversation"
 
 
 def process_full_transcript(transcript: str, verbose: bool = True) -> CurrentStateData:

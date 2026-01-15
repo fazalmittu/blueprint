@@ -539,6 +539,7 @@ export interface ChatSession {
 export interface ChatSessionSummary {
   id: string;
   orgId: string;
+  meetingId?: string;
   title?: string;
   preview?: string;
   messageCount: number;
@@ -649,6 +650,76 @@ export async function addChatMessage(
   );
   if (!res.ok) {
     throw new Error("Failed to add chat message");
+  }
+  return res.json();
+}
+
+// ==================== MEETING CHAT ENDPOINTS ====================
+
+export interface MeetingChatSession {
+  id: string | null;  // null if session hasn't been created yet
+  orgId: string;
+  meetingId: string;
+  title?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  messages: MeetingChatMessage[];
+}
+
+export interface MeetingChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  sources?: Array<{ action?: ChatAction }>;
+}
+
+/**
+ * Get the chat session for a meeting. Creates one if it doesn't exist.
+ */
+export async function getMeetingChatSession(meetingId: string): Promise<MeetingChatSession> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/chat/session`
+  );
+  if (!res.ok) {
+    throw new Error("Failed to fetch meeting chat session");
+  }
+  return res.json();
+}
+
+/**
+ * Add a message to a meeting's chat session.
+ */
+export async function addMeetingChatMessage(
+  meetingId: string,
+  role: "user" | "assistant",
+  content: string,
+  action?: ChatAction
+): Promise<MeetingChatMessage> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/chat/session/message`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role, content, action }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error("Failed to add meeting chat message");
+  }
+  return res.json();
+}
+
+/**
+ * Clear (delete) the chat session for a meeting.
+ */
+export async function clearMeetingChatSession(meetingId: string): Promise<{ success: boolean }> {
+  const res = await fetch(
+    `${API_BASE}/meeting/${encodeURIComponent(meetingId)}/chat/session`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) {
+    throw new Error("Failed to clear meeting chat session");
   }
   return res.json();
 }

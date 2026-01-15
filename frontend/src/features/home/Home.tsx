@@ -30,6 +30,9 @@ export function Home() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [showChatView, setShowChatView] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  
+  // Meeting title filter
+  const [meetingFilter, setMeetingFilter] = useState("");
 
   // Load org, meetings, and chat session count
   useEffect(() => {
@@ -95,6 +98,13 @@ export function Home() {
   const handleSessionCreated = useCallback((sessionId: string) => {
     setActiveSessionId(sessionId);
   }, []);
+
+  // Filter meetings by title
+  const filteredMeetings = meetings.filter((meeting) => {
+    if (!meetingFilter.trim()) return true;
+    const title = meeting.title || `Meeting ${meeting.meetingId}`;
+    return title.toLowerCase().includes(meetingFilter.toLowerCase());
+  });
 
   if (loading) {
     return (
@@ -178,6 +188,35 @@ export function Home() {
           </button>
         </div>
         
+        {/* Meeting title filter */}
+        {meetings.length > 0 && (
+          <div className="meeting-filter">
+            <svg className="filter-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Filter by title..."
+              value={meetingFilter}
+              onChange={(e) => setMeetingFilter(e.target.value)}
+              className="filter-input"
+            />
+            {meetingFilter && (
+              <button 
+                className="filter-clear"
+                onClick={() => setMeetingFilter("")}
+                aria-label="Clear filter"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
+        
         {meetings.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📝</div>
@@ -190,9 +229,19 @@ export function Home() {
               Upload Transcript
             </button>
           </div>
+        ) : filteredMeetings.length === 0 ? (
+          <div className="empty-filter-state">
+            <p>No meetings match "<strong>{meetingFilter}</strong>"</p>
+            <button 
+              className="clear-filter-btn"
+              onClick={() => setMeetingFilter("")}
+            >
+              Clear filter
+            </button>
+          </div>
         ) : (
           <ul className="meetings-list">
-            {meetings.map((meeting) => (
+            {filteredMeetings.map((meeting) => (
               <li
                 key={meeting.meetingId}
                 className="meeting-card"
@@ -343,6 +392,94 @@ export function Home() {
           text-transform: uppercase;
           letter-spacing: 0.05em;
           color: var(--text-muted);
+        }
+
+        .meeting-filter {
+          position: relative;
+          display: flex;
+          align-items: center;
+          margin-bottom: var(--space-md);
+        }
+
+        .filter-icon {
+          position: absolute;
+          left: 12px;
+          color: var(--text-muted);
+          pointer-events: none;
+        }
+
+        .filter-input {
+          width: 100%;
+          padding: 10px 36px;
+          font-size: 0.875rem;
+          font-family: inherit;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          color: var(--text-primary);
+          outline: none;
+          transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        .filter-input::placeholder {
+          color: var(--text-muted);
+        }
+
+        .filter-input:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .filter-clear {
+          position: absolute;
+          right: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          padding: 0;
+          background: var(--bg-tertiary);
+          border: none;
+          border-radius: var(--radius-sm);
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+
+        .filter-clear:hover {
+          background: var(--bg-secondary);
+          color: var(--text-primary);
+        }
+
+        .empty-filter-state {
+          text-align: center;
+          padding: var(--space-xl);
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          color: var(--text-secondary);
+        }
+
+        .empty-filter-state p {
+          margin: 0 0 var(--space-md) 0;
+          font-size: 0.875rem;
+        }
+
+        .clear-filter-btn {
+          padding: var(--space-xs) var(--space-md);
+          background: none;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-sm);
+          color: var(--text-secondary);
+          font-size: 0.8125rem;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+
+        .clear-filter-btn:hover {
+          border-color: var(--accent);
+          color: var(--accent);
         }
 
         .new-meeting-btn {
