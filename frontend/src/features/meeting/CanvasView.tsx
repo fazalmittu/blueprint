@@ -34,25 +34,33 @@ interface ShapeBlockState {
 
 type UserBlock = TextBlockState | ShapeBlockState;
 
+// Layout constants for workflow cards
+const WORKFLOW_START_X = 50;
+const WORKFLOW_START_Y = 50;
+const WORKFLOW_GAP_Y = 40;
+const WORKFLOW_DEFAULT_HEIGHT = 500;
+
 /**
  * Calculate non-overlapping positions for workflow cards.
+ * Each workflow gets its own row, stacked vertically.
  */
-function getWorkflowPosition(index: number): Position {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+function getWorkflowPosition(
+  index: number,
+  workflowIds: string[],
+  workflowSizes: Record<string, { width: number; height: number }>
+): Position {
+  // Calculate cumulative Y position based on heights of all preceding workflows
+  let y = WORKFLOW_START_Y;
   
-  const CARD_WIDTH = vw * 0.3;
-  const GAP_X = vw * 0.03;
-  const START_X = vw * 0.05;
-  const START_Y = vh * 0.1;
-  const ROW_HEIGHT = vh * 0.5;
-  
-  const col = index % 2;
-  const row = Math.floor(index / 2);
+  for (let i = 0; i < index; i++) {
+    const workflowId = workflowIds[i];
+    const height = workflowSizes[workflowId]?.height ?? WORKFLOW_DEFAULT_HEIGHT;
+    y += height + WORKFLOW_GAP_Y;
+  }
   
   return {
-    x: START_X + col * (CARD_WIDTH + GAP_X),
-    y: START_Y + row * ROW_HEIGHT,
+    x: WORKFLOW_START_X,
+    y,
   };
 }
 
@@ -134,8 +142,14 @@ export function CanvasView({
   }, [handleKeyDown]);
 
   const getWorkflowPos = useCallback((workflowId: string, index: number): Position => {
-    return workflowPositions[workflowId] || getWorkflowPosition(index);
-  }, [workflowPositions]);
+    // If user has manually positioned this workflow, use that position
+    if (workflowPositions[workflowId]) {
+      return workflowPositions[workflowId];
+    }
+    // Otherwise calculate stacked position based on preceding workflows
+    const workflowIds = workflows.map(w => w.id);
+    return getWorkflowPosition(index, workflowIds, workflowSizes);
+  }, [workflowPositions, workflows, workflowSizes]);
 
   const handleWorkflowPositionChange = useCallback((workflowId: string, position: Position) => {
     setWorkflowPositions(prev => ({ ...prev, [workflowId]: position }));
