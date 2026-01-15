@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { 
   getCurrentOrg, 
   getMeetingsByOrg, 
-  createMeeting, 
+  createMeeting,
+  getChatSessions, 
   type MeetingsResponse,
   type SearchResponse,
+  type ChatSessionSummary,
 } from "@/api/client";
 import { UploadTranscriptModal } from "./UploadTranscriptModal";
 import { SearchBar } from "./SearchBar";
@@ -13,73 +15,35 @@ import { OrgChatView } from "./OrgChatView";
 
 type Meeting = MeetingsResponse["meetings"][number];
 
-const SEARCH_STORAGE_KEY = "blueprint_search_state";
-
-interface PersistedSearchState {
-  query: string;
-  result: SearchResponse;
-}
-
-function saveSearchState(query: string, result: SearchResponse) {
-  try {
-    sessionStorage.setItem(SEARCH_STORAGE_KEY, JSON.stringify({ query, result }));
-  } catch {
-    // Ignore storage errors
-  }
-}
-
-function loadSearchState(): PersistedSearchState | null {
-  try {
-    const stored = sessionStorage.getItem(SEARCH_STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored) as PersistedSearchState;
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return null;
-}
-
-function clearSearchState() {
-  try {
-    sessionStorage.removeItem(SEARCH_STORAGE_KEY);
-  } catch {
-    // Ignore storage errors
-  }
-}
-
 export function Home() {
   const navigate = useNavigate();
   const [orgId, setOrgId] = useState<string | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [chatSessionCount, setChatSessionCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   
-  // Search state - initialize from sessionStorage if available
-  const [searchQuery, setSearchQuery] = useState(() => {
-    const saved = loadSearchState();
-    return saved?.query ?? "";
-  });
-  const [searchResult, setSearchResult] = useState<SearchResponse | null>(() => {
-    const saved = loadSearchState();
-    return saved?.result ?? null;
-  });
+  // Search/chat state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResult, setSearchResult] = useState<SearchResponse | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [showChatView, setShowChatView] = useState(() => {
-    // Show chat view if we have persisted search state
-    const saved = loadSearchState();
-    return saved?.query && saved?.result?.success ? true : false;
-  });
+  const [showChatView, setShowChatView] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
+  // Load org, meetings, and chat session count
   useEffect(() => {
     async function load() {
       try {
         const orgRes = await getCurrentOrg();
         setOrgId(orgRes.orgId);
 
-        const meetingsRes = await getMeetingsByOrg(orgRes.orgId);
+        const [meetingsRes, chatsRes] = await Promise.all([
+          getMeetingsByOrg(orgRes.orgId),
+          getChatSessions(orgRes.orgId, 100), // Get sessions for count
+        ]);
         setMeetings(meetingsRes.meetings);
+        setChatSessionCount(chatsRes.sessions.length);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
       } finally {
@@ -102,19 +66,34 @@ export function Home() {
   const handleSearch = useCallback((query: string) => {
     if (!orgId) return;
     
-    // Immediately show the chat view with the query - the chat view will handle the search
+    // Start a new chat with this query
+    setActiveSessionId(null);
     setSearchQuery(query);
-    setSearchResult(null); // Clear any previous result
+    setSearchResult(null);
     setSearchError(null);
     setShowChatView(true);
   }, [orgId]);
+
+  // Open chat view to browse past conversations
+  const handleOpenPastChats = useCallback(() => {
+    setActiveSessionId(null);
+    setSearchQuery("");
+    setSearchResult(null);
+    setSearchError(null);
+    setShowChatView(true);
+  }, []);
 
   const handleCloseSearch = useCallback(() => {
     setSearchResult(null);
     setSearchQuery("");
     setSearchError(null);
     setShowChatView(false);
-    clearSearchState();
+    setActiveSessionId(null);
+  }, []);
+
+  // Handle when a new session is created in OrgChatView
+  const handleSessionCreated = useCallback((sessionId: string) => {
+    setActiveSessionId(sessionId);
   }, []);
 
   if (loading) {
@@ -158,6 +137,20 @@ export function Home() {
             placeholder="Ask anything about your meetings..."
             initialQuery={searchQuery}
           />
+          
+          {/* Link to view past conversations */}
+          <button 
+            className="past-chats-link"
+            onClick={handleOpenPastChats}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            View past conversations
+            {chatSessionCount > 0 && (
+              <span className="chat-count">{chatSessionCount}</span>
+            )}
+          </button>
           
           {searchError && (
             <div className="search-error">
@@ -239,9 +232,11 @@ export function Home() {
       {showChatView && orgId && (
         <OrgChatView
           orgId={orgId}
-          initialQuery={searchQuery}
+          initialQuery={activeSessionId ? "" : searchQuery}
           initialResult={searchResult}
+          sessionId={activeSessionId || undefined}
           onClose={handleCloseSearch}
+          onSessionCreated={handleSessionCreated}
         />
       )}
 
@@ -287,6 +282,37 @@ export function Home() {
         .search-section {
           max-width: 640px;
           margin: 0 auto;
+        }
+
+        .past-chats-link {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: var(--space-sm);
+          margin-top: var(--space-md);
+          padding: var(--space-sm) var(--space-md);
+          background: none;
+          border: none;
+          color: var(--text-secondary);
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: color var(--transition-fast);
+          width: 100%;
+        }
+
+        .past-chats-link:hover {
+          color: var(--accent);
+        }
+
+        .chat-count {
+          background: var(--accent);
+          color: white;
+          font-size: 0.6875rem;
+          font-weight: 600;
+          padding: 2px 8px;
+          border-radius: 9999px;
+          min-width: 20px;
+          text-align: center;
         }
 
         .search-error {

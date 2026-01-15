@@ -70,10 +70,47 @@ def init_db():
             )
         ''')
         
+        # Create chat_sessions table for org-wide search chats
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id TEXT PRIMARY KEY,
+                org_id TEXT NOT NULL,
+                title TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+        
+        # Create chat_messages table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                sources_json TEXT,
+                strategy_used TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+            )
+        ''')
+        
         # Create index for faster lookups
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_state_versions_meeting_id 
             ON state_versions(meeting_id)
+        ''')
+        
+        # Create index for chat sessions by org
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_chat_sessions_org_id 
+            ON chat_sessions(org_id)
+        ''')
+        
+        # Create index for messages by session
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id 
+            ON chat_messages(session_id)
         ''')
         
         # Migration: add transcript and total_chunks columns if they don't exist
@@ -460,6 +497,185 @@ def update_latest_state_summary(meeting_id: str, meeting_summary: str) -> Option
             currentStateId=row['current_state_id'],
             data=current_data
         )
+
+
+# ==================== CHAT SESSION OPERATIONS ====================
+
+def create_chat_session(session_id: str, org_id: str, title: Optional[str] = None) -> dict:
+    """Create a new chat session."""
+    from datetime import datetime
+    now = datetime.utcnow().isoformat()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            '''INSERT INTO chat_sessions (id, org_id, title, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?)''',
+            (session_id, org_id, title, now, now)
+        )
+    
+    return {
+        'id': session_id,
+        'orgId': org_id,
+        'title': title,
+        'createdAt': now,
+        'updatedAt': now,
+        'messages': []
+    }
+
+
+def get_chat_session(session_id: str) -> Optional[dict]:
+    """Get a chat session with all its messages."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Get session
+        cursor.execute(
+            'SELECT id, org_id, title, created_at, updated_at FROM chat_sessions WHERE id = ?',
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        
+        if row is None:
+            return None
+        
+        # Get messages
+        cursor.execute(
+            '''SELECT id, role, content, sources_json, strategy_used, created_at 
+               FROM chat_messages WHERE session_id = ? ORDER BY id ASC''',
+            (session_id,)
+        )
+        message_rows = cursor.fetchall()
+        
+        messages = []
+        for msg in message_rows:
+            message = {
+                'id': str(msg['id']),
+                'role': msg['role'],
+                'content': msg['content'],
+                'createdAt': msg['created_at']
+            }
+            if msg['sources_json']:
+                message['sources'] = json.loads(msg['sources_json'])
+            if msg['strategy_used']:
+                message['strategyUsed'] = msg['strategy_used']
+            messages.append(message)
+        
+        return {
+            'id': row['id'],
+            'orgId': row['org_id'],
+            'title': row['title'],
+            'createdAt': row['created_at'],
+            'updatedAt': row['updated_at'],
+            'messages': messages
+        }
+
+
+def get_chat_sessions_by_org(org_id: str, limit: int = 50) -> list[dict]:
+    """Get all chat sessions for an organization, most recent first."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            '''SELECT id, org_id, title, created_at, updated_at 
+               FROM chat_sessions 
+               WHERE org_id = ? 
+               ORDER BY updated_at DESC
+               LIMIT ?''',
+            (org_id, limit)
+        )
+        rows = cursor.fetchall()
+        
+        sessions = []
+        for row in rows:
+            # Get first message preview
+            cursor.execute(
+                '''SELECT content FROM chat_messages 
+                   WHERE session_id = ? AND role = 'user' 
+                   ORDER BY id ASC LIMIT 1''',
+                (row['id'],)
+            )
+            first_msg = cursor.fetchone()
+            preview = first_msg['content'][:100] if first_msg else None
+            
+            # Get message count
+            cursor.execute(
+                'SELECT COUNT(*) FROM chat_messages WHERE session_id = ?',
+                (row['id'],)
+            )
+            msg_count = cursor.fetchone()[0]
+            
+            sessions.append({
+                'id': row['id'],
+                'orgId': row['org_id'],
+                'title': row['title'],
+                'preview': preview,
+                'messageCount': msg_count,
+                'createdAt': row['created_at'],
+                'updatedAt': row['updated_at']
+            })
+        
+        return sessions
+
+
+def add_chat_message(session_id: str, role: str, content: str, 
+                     sources: Optional[list] = None, strategy_used: Optional[str] = None) -> dict:
+    """Add a message to a chat session."""
+    from datetime import datetime
+    now = datetime.utcnow().isoformat()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        sources_json = json.dumps(sources) if sources else None
+        
+        cursor.execute(
+            '''INSERT INTO chat_messages (session_id, role, content, sources_json, strategy_used, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (session_id, role, content, sources_json, strategy_used, now)
+        )
+        message_id = cursor.lastrowid
+        
+        # Update session updated_at
+        cursor.execute(
+            'UPDATE chat_sessions SET updated_at = ? WHERE id = ?',
+            (now, session_id)
+        )
+    
+    message = {
+        'id': str(message_id),
+        'role': role,
+        'content': content,
+        'createdAt': now
+    }
+    if sources:
+        message['sources'] = sources
+    if strategy_used:
+        message['strategyUsed'] = strategy_used
+    
+    return message
+
+
+def update_chat_session_title(session_id: str, title: str) -> bool:
+    """Update a chat session's title."""
+    from datetime import datetime
+    now = datetime.utcnow().isoformat()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ?',
+            (title, now, session_id)
+        )
+        return cursor.rowcount > 0
+
+
+def delete_chat_session(session_id: str) -> bool:
+    """Delete a chat session and all its messages."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # Messages will be deleted by CASCADE
+        cursor.execute('DELETE FROM chat_sessions WHERE id = ?', (session_id,))
+        return cursor.rowcount > 0
 
 
 # Initialize the database on module import

@@ -1,11 +1,27 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { searchOrg, getMeeting, type SearchResponse, type SearchSource, type MeetingResponse, type Workflow } from "@/api/client";
+import { useNavigate } from "react-router-dom";
+import { 
+  searchOrg, 
+  getMeeting, 
+  createChatSession,
+  getChatSession,
+  getChatSessions,
+  deleteChatSession,
+  addChatMessage,
+  type SearchResponse, 
+  type SearchSource, 
+  type MeetingResponse, 
+  type Workflow,
+  type ChatSessionSummary,
+} from "@/api/client";
 
 interface OrgChatViewProps {
   orgId: string;
   initialQuery: string;
   initialResult?: SearchResponse | null;
+  sessionId?: string;  // Optional: load existing session
   onClose: () => void;
+  onSessionCreated?: (sessionId: string) => void;  // Callback when new session is created
 }
 
 interface Message {
@@ -214,44 +230,26 @@ const getDocTypeColor = (docType: string) => {
 /**
  * Full-screen org-wide chat view for search.
  */
-export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: OrgChatViewProps) {
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const initial: Message[] = [];
-    
-    // Add initial query as user message if provided
-    if (initialQuery) {
-      initial.push({
-        id: `user-initial`,
-        role: "user",
-        content: initialQuery,
-        timestamp: new Date(),
-      });
-      
-      // Add initial result as assistant message if provided
-      if (initialResult?.success) {
-        initial.push({
-          id: `assistant-initial`,
-          role: "assistant",
-          content: initialResult.answer,
-          timestamp: new Date(),
-          sources: initialResult.sources,
-          strategyUsed: initialResult.strategy_used,
-        });
-      }
-    }
-    
-    return initial;
-  });
-  
+export function OrgChatView({ orgId, initialQuery, initialResult, sessionId, onClose, onSessionCreated }: OrgChatViewProps) {
+  const navigate = useNavigate();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(sessionId || null);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(() => {
-    // Start loading if we have a query but no result
-    return Boolean(initialQuery && !initialResult);
-  });
+  // Track which session is loading a response (null = not loading)
+  const [loadingResponseForSession, setLoadingResponseForSession] = useState<string | null>(null);
+  const [isLoadingSession, setIsLoadingSession] = useState(Boolean(sessionId));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
-  const hasFetchedInitial = useRef(false);
+  const hasInitialized = useRef(false);
+  
+  // Check if the current session is loading
+  const isLoading = loadingResponseForSession === currentSessionId && currentSessionId !== null;
+  
+  // State for sidebar
+  const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // State for source panel
   const [selectedSource, setSelectedSource] = useState<SearchSource | null>(null);
@@ -260,39 +258,190 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
   const [panelView, setPanelView] = useState<"source" | "meeting">("source");
   const [isPanelExpanded, setIsPanelExpanded] = useState(false);
 
-  // Fetch initial query result on mount if not provided
+  // Load chat sessions for sidebar
   useEffect(() => {
-    if (initialQuery && !initialResult && !hasFetchedInitial.current) {
-      hasFetchedInitial.current = true;
+    (async () => {
+      try {
+        const res = await getChatSessions(orgId);
+        setChatSessions(res.sessions);
+      } catch (error) {
+        console.error("Failed to load chat sessions:", error);
+      } finally {
+        setIsLoadingSessions(false);
+      }
+    })();
+  }, [orgId]);
+
+  // Refresh chat sessions
+  const refreshChatSessions = useCallback(async () => {
+    try {
+      const res = await getChatSessions(orgId);
+      setChatSessions(res.sessions);
+    } catch (error) {
+      console.error("Failed to refresh chat sessions:", error);
+    }
+  }, [orgId]);
+
+  // Handle switching to a different session
+  const handleSwitchSession = useCallback(async (newSessionId: string) => {
+    if (newSessionId === currentSessionId) return;
+    
+    setIsLoadingSession(true);
+    setMessages([]);
+    setCurrentSessionId(newSessionId);
+    setSelectedSource(null);
+    
+    try {
+      const session = await getChatSession(newSessionId);
+      const loadedMessages: Message[] = session.messages.map((msg) => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date(msg.createdAt),
+        sources: msg.sources,
+        strategyUsed: msg.strategyUsed,
+      }));
+      setMessages(loadedMessages);
+    } catch (error) {
+      console.error("Failed to load session:", error);
+    } finally {
+      setIsLoadingSession(false);
+    }
+  }, [currentSessionId]);
+
+  // Handle starting a new chat
+  const handleNewChat = useCallback(() => {
+    setCurrentSessionId(null);
+    setMessages([]);
+    setSelectedSource(null);
+    hasInitialized.current = false;
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
+
+  // Handle deleting a chat session
+  const handleDeleteSession = useCallback(async (sessId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Delete this conversation?")) return;
+    
+    try {
+      await deleteChatSession(sessId);
+      setChatSessions((prev) => prev.filter((s) => s.id !== sessId));
       
-      (async () => {
+      // If we deleted the current session, start a new chat
+      if (sessId === currentSessionId) {
+        handleNewChat();
+      }
+    } catch (error) {
+      console.error("Failed to delete chat:", error);
+    }
+  }, [currentSessionId, handleNewChat]);
+
+  // Save a message to the backend
+  const saveMessage = useCallback(async (
+    sessId: string,
+    role: "user" | "assistant",
+    content: string,
+    sources?: SearchSource[],
+    strategyUsed?: string
+  ) => {
+    try {
+      await addChatMessage(sessId, role, content, sources, strategyUsed);
+      // Refresh sessions to update preview/timestamps
+      refreshChatSessions();
+    } catch (error) {
+      console.error("Failed to save message:", error);
+    }
+  }, [refreshChatSessions]);
+
+  // Initialize session and messages
+  useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
+    (async () => {
+      // If we have a sessionId, load that session
+      if (sessionId) {
+        setIsLoadingSession(true);
         try {
-          const result = await searchOrg(orgId, initialQuery);
+          const session = await getChatSession(sessionId);
+          const loadedMessages: Message[] = session.messages.map((msg) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.createdAt),
+            sources: msg.sources,
+            strategyUsed: msg.strategyUsed,
+          }));
+          setMessages(loadedMessages);
+          setCurrentSessionId(sessionId);
+        } catch (error) {
+          console.error("Failed to load session:", error);
+        } finally {
+          setIsLoadingSession(false);
+        }
+        return;
+      }
+
+      // If we have an initial query, create a session and process it
+      if (initialQuery) {
+        try {
+          // Create a new session
+          const session = await createChatSession(orgId);
+          setCurrentSessionId(session.id);
+          setLoadingResponseForSession(session.id);
+          onSessionCreated?.(session.id);
+
+          // Add user message
+          const userMessage: Message = {
+            id: `user-${Date.now()}`,
+            role: "user",
+            content: initialQuery,
+            timestamp: new Date(),
+          };
+          setMessages([userMessage]);
           
+          // Save user message to backend
+          await saveMessage(session.id, "user", initialQuery);
+
+          // If we already have the result, use it; otherwise fetch
+          let result = initialResult;
+          if (!result) {
+            result = await searchOrg(orgId, initialQuery);
+          }
+
           const assistantMessage: Message = {
-            id: `assistant-initial`,
+            id: `assistant-${Date.now()}`,
             role: "assistant",
             content: result.success ? result.answer : (result.error || "Sorry, I couldn't find an answer to that question."),
             timestamp: new Date(),
             sources: result.success ? result.sources : [],
             strategyUsed: result.strategy_used,
           };
-
+          
           setMessages((prev) => [...prev, assistantMessage]);
+          
+          // Save assistant message to backend
+          await saveMessage(
+            session.id,
+            "assistant",
+            assistantMessage.content,
+            assistantMessage.sources,
+            assistantMessage.strategyUsed
+          );
         } catch (error) {
           const errorMessage: Message = {
-            id: `error-initial`,
+            id: `error-${Date.now()}`,
             role: "assistant",
             content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : "Unknown error"}. Please try again.`,
             timestamp: new Date(),
           };
           setMessages((prev) => [...prev, errorMessage]);
         } finally {
-          setIsLoading(false);
+          setLoadingResponseForSession(null);
         }
-      })();
-    }
-  }, [initialQuery, initialResult, orgId]);
+      }
+    })();
+  }, [sessionId, initialQuery, initialResult, orgId, onSessionCreated, saveMessage]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -324,6 +473,20 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
     const trimmedInput = input.trim();
     if (!trimmedInput || isLoading) return;
 
+    // Ensure we have a session
+    let sessId = currentSessionId;
+    if (!sessId) {
+      try {
+        const session = await createChatSession(orgId);
+        sessId = session.id;
+        setCurrentSessionId(sessId);
+        onSessionCreated?.(sessId);
+      } catch (error) {
+        console.error("Failed to create session:", error);
+        return;
+      }
+    }
+
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -333,7 +496,10 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setIsLoading(true);
+    setLoadingResponseForSession(sessId);
+
+    // Save user message to backend
+    saveMessage(sessId, "user", trimmedInput);
 
     try {
       // Build conversation history for context
@@ -354,6 +520,15 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      
+      // Save assistant message to backend
+      saveMessage(
+        sessId,
+        "assistant",
+        assistantMessage.content,
+        assistantMessage.sources,
+        assistantMessage.strategyUsed
+      );
     } catch (error) {
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
@@ -363,9 +538,9 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
-      setIsLoading(false);
+      setLoadingResponseForSession(null);
     }
-  }, [input, isLoading, orgId, messages]);
+  }, [input, isLoading, orgId, messages, currentSessionId, onSessionCreated, saveMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -378,6 +553,11 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
     setSelectedSource(source);
     setPanelView("source");
     setMeetingData(null);
+  };
+
+  // Navigate to the meeting page to view/edit
+  const handleOpenMeeting = (meetingId: string) => {
+    navigate(`/meeting/${meetingId}`);
   };
 
   const handleViewFullMeeting = async (meetingId: string) => {
@@ -514,8 +694,205 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
         </div>
       </div>
 
-      {/* Main Content Area with optional Source Panel */}
+      {/* Main Content Area with Sidebar and optional Source Panel */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        {/* Left Sidebar - Past Conversations */}
+        <div
+          style={{
+            width: isSidebarCollapsed ? 0 : 280,
+            flexShrink: 0,
+            borderRight: isSidebarCollapsed ? "none" : "1px solid var(--border-subtle)",
+            background: "var(--bg-elevated)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            transition: "width 0.2s ease",
+          }}
+        >
+          {!isSidebarCollapsed && (
+            <>
+              {/* Sidebar Header */}
+              <div
+                style={{
+                  padding: "var(--space-md)",
+                  borderBottom: "1px solid var(--border-subtle)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                  Conversations
+                </span>
+                <button
+                  onClick={handleNewChat}
+                  style={{
+                    padding: "var(--space-xs) var(--space-sm)",
+                    background: "var(--accent)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    fontSize: "0.75rem",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                  title="New conversation"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  New
+                </button>
+              </div>
+              
+              {/* Sessions List */}
+              <div style={{ flex: 1, overflowY: "auto", padding: "var(--space-sm)" }}>
+                {isLoadingSessions ? (
+                  <div style={{ padding: "var(--space-lg)", textAlign: "center", color: "var(--text-muted)" }}>
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        border: "2px solid var(--border-subtle)",
+                        borderTopColor: "var(--accent)",
+                        borderRadius: "50%",
+                        animation: "spin 1s linear infinite",
+                        margin: "0 auto",
+                      }}
+                    />
+                  </div>
+                ) : chatSessions.length === 0 ? (
+                  <div
+                    style={{
+                      padding: "var(--space-lg)",
+                      textAlign: "center",
+                      color: "var(--text-muted)",
+                      fontSize: "0.8125rem",
+                    }}
+                  >
+                    No conversations yet
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xs)" }}>
+                    {chatSessions.map((session) => (
+                      <div
+                        key={session.id}
+                        onClick={() => handleSwitchSession(session.id)}
+                        style={{
+                          padding: "var(--space-sm) var(--space-md)",
+                          borderRadius: "var(--radius-md)",
+                          cursor: "pointer",
+                          background: session.id === currentSessionId ? "var(--bg-tertiary)" : "transparent",
+                          border: session.id === currentSessionId ? "1px solid var(--border-default)" : "1px solid transparent",
+                          transition: "all 0.15s ease",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "var(--space-sm)",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (session.id !== currentSessionId) {
+                            e.currentTarget.style.background = "var(--bg-secondary)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (session.id !== currentSessionId) {
+                            e.currentTarget.style.background = "transparent";
+                          }
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: "0.8125rem",
+                              fontWeight: 500,
+                              color: "var(--text-primary)",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
+                            {session.title || session.preview || "New conversation"}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.6875rem",
+                              color: "var(--text-muted)",
+                              marginTop: 2,
+                            }}
+                          >
+                            {session.messageCount} messages · {new Date(session.updatedAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => handleDeleteSession(session.id, e)}
+                          style={{
+                            padding: 4,
+                            background: "none",
+                            border: "none",
+                            borderRadius: "var(--radius-sm)",
+                            color: "var(--text-muted)",
+                            cursor: "pointer",
+                            opacity: 0,
+                            transition: "opacity 0.15s ease",
+                          }}
+                          className="delete-btn"
+                          title="Delete conversation"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Sidebar Toggle Button */}
+        <button
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          style={{
+            position: "absolute",
+            left: isSidebarCollapsed ? 0 : 280,
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 10,
+            padding: "8px 4px",
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border-subtle)",
+            borderLeft: "none",
+            borderRadius: "0 var(--radius-sm) var(--radius-sm) 0",
+            cursor: "pointer",
+            color: "var(--text-muted)",
+            transition: "left 0.2s ease",
+          }}
+          title={isSidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            style={{
+              transform: isSidebarCollapsed ? "rotate(0deg)" : "rotate(180deg)",
+              transition: "transform 0.2s ease",
+            }}
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
         {/* Chat Area */}
         <div
           style={{
@@ -546,7 +923,32 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
                 gap: "var(--space-lg)",
               }}
             >
-          {messages.length === 0 && (
+          {isLoadingSession && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "var(--space-2xl)",
+                color: "var(--text-muted)",
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  border: "3px solid var(--border-subtle)",
+                  borderTopColor: "var(--accent)",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                  margin: "0 auto var(--space-md)",
+                }}
+              />
+              <p style={{ margin: 0, fontSize: "0.875rem" }}>
+                Loading conversation...
+              </p>
+            </div>
+          )}
+          
+          {!isLoadingSession && messages.length === 0 && (
             <div
               style={{
                 textAlign: "center",
@@ -752,14 +1154,50 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
                                       {getDocTypeLabel(source.doc_type)}
                                     </span>
                                   </div>
-                                  <span
-                                    style={{
-                                      fontSize: "0.6875rem",
-                                      color: "var(--text-muted)",
-                                    }}
-                                  >
-                                    {(source.score * 100).toFixed(0)}% match
-                                  </span>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <span
+                                      style={{
+                                        fontSize: "0.6875rem",
+                                        color: "var(--text-muted)",
+                                      }}
+                                    >
+                                      {(source.score * 100).toFixed(0)}%
+                                    </span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenMeeting(source.meeting_id);
+                                      }}
+                                      style={{
+                                        padding: "4px 8px",
+                                        background: "var(--accent)",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "var(--radius-sm)",
+                                        fontSize: "0.6875rem",
+                                        fontWeight: 500,
+                                        cursor: "pointer",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 4,
+                                        transition: "opacity 0.15s ease",
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.opacity = "0.9";
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.opacity = "1";
+                                      }}
+                                      title="Open meeting to view & edit"
+                                    >
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                        <polyline points="15 3 21 3 21 9" />
+                                        <line x1="10" y1="14" x2="21" y2="3" />
+                                      </svg>
+                                      Open
+                                    </button>
+                                  </div>
                                 </div>
                                 {source.text_snippet && (
                                   <div
@@ -1378,47 +1816,124 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
               padding: "var(--space-md) var(--space-lg)",
               borderTop: "1px solid var(--border-subtle)",
               flexShrink: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--space-sm)",
             }}
           >
             {panelView === "source" ? (
-              <button
-                onClick={() => handleViewFullMeeting(selectedSource.meeting_id)}
-                disabled={isMeetingLoading}
-                style={{
-                  width: "100%",
-                  padding: "var(--space-sm) var(--space-md)",
-                  background: "var(--accent)",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "var(--radius-md)",
-                  fontSize: "0.875rem",
-                  fontWeight: 500,
-                  cursor: isMeetingLoading ? "default" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "var(--space-sm)",
-                  transition: "opacity 0.15s ease",
-                  opacity: isMeetingLoading ? 0.7 : 1,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isMeetingLoading) e.currentTarget.style.opacity = "0.9";
-                }}
-                onMouseLeave={(e) => {
-                  if (!isMeetingLoading) e.currentTarget.style.opacity = "1";
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <line x1="3" y1="9" x2="21" y2="9" />
-                  <line x1="9" y1="21" x2="9" y2="9" />
-                </svg>
-                View Full Meeting
-              </button>
+              <>
+                {/* Primary: Open & Edit */}
+                <button
+                  onClick={() => handleOpenMeeting(selectedSource.meeting_id)}
+                  style={{
+                    width: "100%",
+                    padding: "var(--space-sm) var(--space-md)",
+                    background: "var(--accent)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "var(--radius-md)",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "var(--space-sm)",
+                    transition: "opacity 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.opacity = "0.9";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.opacity = "1";
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  Open & Edit Meeting
+                </button>
+                
+                {/* Secondary: Preview Details */}
+                <button
+                  onClick={() => handleViewFullMeeting(selectedSource.meeting_id)}
+                  disabled={isMeetingLoading}
+                  style={{
+                    width: "100%",
+                    padding: "var(--space-sm) var(--space-md)",
+                    background: "transparent",
+                    color: "var(--text-secondary)",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: "var(--radius-md)",
+                    fontSize: "0.8125rem",
+                    fontWeight: 500,
+                    cursor: isMeetingLoading ? "default" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "var(--space-sm)",
+                    transition: "all 0.15s ease",
+                    opacity: isMeetingLoading ? 0.7 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isMeetingLoading) {
+                      e.currentTarget.style.background = "var(--bg-tertiary)";
+                      e.currentTarget.style.borderColor = "var(--border-default)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isMeetingLoading) {
+                      e.currentTarget.style.background = "transparent";
+                    }
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  Preview Details
+                </button>
+              </>
             ) : (
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center" }}>
-                Viewing meeting details • Click back arrow to return to source
-              </div>
+              <>
+                {/* In meeting preview mode - show Open & Edit as primary */}
+                <button
+                  onClick={() => handleOpenMeeting(selectedSource.meeting_id)}
+                  style={{
+                    width: "100%",
+                    padding: "var(--space-sm) var(--space-md)",
+                    background: "var(--accent)",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "var(--radius-md)",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "var(--space-sm)",
+                    transition: "opacity 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.opacity = "0.9";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.opacity = "1";
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  Open & Edit Meeting
+                </button>
+                <div style={{ fontSize: "0.6875rem", color: "var(--text-muted)", textAlign: "center" }}>
+                  Viewing preview • Click above to edit
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -1452,6 +1967,16 @@ export function OrgChatView({ orgId, initialQuery, initialResult, onClose }: Org
         
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        
+        /* Show delete button on hover */
+        div:hover > .delete-btn {
+          opacity: 1 !important;
+        }
+        
+        .delete-btn:hover {
+          color: #dc2626 !important;
+          background: rgba(220, 38, 38, 0.1) !important;
         }
       `}</style>
     </div>

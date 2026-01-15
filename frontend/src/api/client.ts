@@ -515,3 +515,140 @@ export async function reindexMeeting(meetingId: string): Promise<{ meeting_id: s
   }
   return res.json();
 }
+
+// ==================== CHAT HISTORY ENDPOINTS ====================
+
+export interface ChatSessionMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  sources?: SearchSource[];
+  strategyUsed?: string;
+}
+
+export interface ChatSession {
+  id: string;
+  orgId: string;
+  title?: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatSessionMessage[];
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  orgId: string;
+  title?: string;
+  preview?: string;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatSessionsResponse {
+  sessions: ChatSessionSummary[];
+}
+
+/**
+ * Get all chat sessions for an organization.
+ */
+export async function getChatSessions(orgId: string, limit?: number): Promise<ChatSessionsResponse> {
+  let url = `${API_BASE}/org/${encodeURIComponent(orgId)}/chats`;
+  if (limit !== undefined) {
+    url += `?limit=${limit}`;
+  }
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error("Failed to fetch chat sessions");
+  }
+  return res.json();
+}
+
+/**
+ * Create a new chat session.
+ */
+export async function createChatSession(orgId: string, title?: string): Promise<ChatSession> {
+  const res = await fetch(
+    `${API_BASE}/org/${encodeURIComponent(orgId)}/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error("Failed to create chat session");
+  }
+  return res.json();
+}
+
+/**
+ * Get a chat session with all its messages.
+ */
+export async function getChatSession(sessionId: string): Promise<ChatSession> {
+  const res = await fetch(`${API_BASE}/chat/${encodeURIComponent(sessionId)}`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch chat session");
+  }
+  return res.json();
+}
+
+/**
+ * Delete a chat session.
+ */
+export async function deleteChatSession(sessionId: string): Promise<{ success: boolean }> {
+  const res = await fetch(
+    `${API_BASE}/chat/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) {
+    throw new Error("Failed to delete chat session");
+  }
+  return res.json();
+}
+
+/**
+ * Update a chat session's title.
+ */
+export async function updateChatSessionTitle(
+  sessionId: string,
+  title: string
+): Promise<{ success: boolean; title: string }> {
+  const res = await fetch(
+    `${API_BASE}/chat/${encodeURIComponent(sessionId)}/title`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error("Failed to update chat title");
+  }
+  return res.json();
+}
+
+/**
+ * Add a message to a chat session.
+ */
+export async function addChatMessage(
+  sessionId: string,
+  role: "user" | "assistant",
+  content: string,
+  sources?: SearchSource[],
+  strategyUsed?: string
+): Promise<ChatSessionMessage> {
+  const res = await fetch(
+    `${API_BASE}/chat/${encodeURIComponent(sessionId)}/message`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role, content, sources, strategyUsed }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error("Failed to add chat message");
+  }
+  return res.json();
+}

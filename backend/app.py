@@ -940,6 +940,124 @@ def register_routes(app):
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
+    # ==================== CHAT HISTORY ENDPOINTS ====================
+
+    @app.route('/org/<org_id>/chats', methods=['GET'])
+    def get_chat_sessions(org_id: str):
+        """
+        Get all chat sessions for an organization.
+        
+        Query Parameters:
+            limit (int, optional): Max sessions to return (default: 50)
+        
+        Returns:
+            List of chat session summaries
+        """
+        limit = request.args.get('limit', 50, type=int)
+        sessions = db.get_chat_sessions_by_org(org_id, limit)
+        return jsonify({'sessions': sessions}), 200
+
+    @app.route('/org/<org_id>/chat', methods=['POST'])
+    def create_chat_session(org_id: str):
+        """
+        Create a new chat session.
+        
+        Request Body:
+            title (str, optional): Initial title for the chat
+        
+        Returns:
+            The created chat session
+        """
+        session_id = str(uuid.uuid4())
+        data = request.get_json() or {}
+        title = data.get('title')
+        
+        session = db.create_chat_session(session_id, org_id, title)
+        return jsonify(session), 201
+
+    @app.route('/chat/<session_id>', methods=['GET'])
+    def get_chat_session(session_id: str):
+        """
+        Get a chat session with all its messages.
+        
+        Returns:
+            The chat session with messages
+        """
+        session = db.get_chat_session(session_id)
+        if not session:
+            return jsonify({'error': 'Chat session not found'}), 404
+        return jsonify(session), 200
+
+    @app.route('/chat/<session_id>', methods=['DELETE'])
+    def delete_chat_session(session_id: str):
+        """
+        Delete a chat session.
+        
+        Returns:
+            Success status
+        """
+        success = db.delete_chat_session(session_id)
+        if not success:
+            return jsonify({'error': 'Chat session not found'}), 404
+        return jsonify({'success': True}), 200
+
+    @app.route('/chat/<session_id>/title', methods=['PATCH'])
+    def update_chat_title(session_id: str):
+        """
+        Update a chat session's title.
+        
+        Request Body:
+            title (str): The new title
+        
+        Returns:
+            Success status
+        """
+        data = request.get_json()
+        if not data or 'title' not in data:
+            return jsonify({'error': 'title is required'}), 400
+        
+        success = db.update_chat_session_title(session_id, data['title'])
+        if not success:
+            return jsonify({'error': 'Chat session not found'}), 404
+        return jsonify({'success': True, 'title': data['title']}), 200
+
+    @app.route('/chat/<session_id>/message', methods=['POST'])
+    def add_chat_message(session_id: str):
+        """
+        Add a message to a chat session.
+        
+        Request Body:
+            role (str): 'user' or 'assistant'
+            content (str): The message content
+            sources (list, optional): Search sources for assistant messages
+            strategyUsed (str, optional): Strategy used for the search
+        
+        Returns:
+            The created message
+        """
+        # Verify session exists
+        session = db.get_chat_session(session_id)
+        if not session:
+            return jsonify({'error': 'Chat session not found'}), 404
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        role = data.get('role')
+        content = data.get('content')
+        
+        if not role or role not in ('user', 'assistant'):
+            return jsonify({'error': 'role must be "user" or "assistant"'}), 400
+        if not content:
+            return jsonify({'error': 'content is required'}), 400
+        
+        sources = data.get('sources')
+        strategy_used = data.get('strategyUsed')
+        
+        message = db.add_chat_message(session_id, role, content, sources, strategy_used)
+        return jsonify(message), 201
+
 
 def broadcast_to_meeting(meeting_id: str, message: dict):
     """Broadcast a message to all SSE connections for a meeting."""
